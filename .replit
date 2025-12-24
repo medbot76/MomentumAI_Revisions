@@ -1,8 +1,9 @@
 language = "python3"
 run = "cd backend && python app.py"
+modules = ["python-3.12", "nodejs-20", "web"]
 
 [nix]
-channel = "stable-23_11"
+channel = "stable-25_05"
 deps = ["pkgs.gcc-libs"]
 
 [deployment]
