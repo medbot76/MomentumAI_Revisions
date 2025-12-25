@@ -135,9 +135,14 @@ class ChatBot:
         # Use MultiHopRAGPipeline by default; switch to RAGPipeline() for single-hop
         self.rag = MultiHopRAGPipeline()
 
-        # Arcade client for YouTube search
-        self.arcade_client = Arcade()
-        self._youtube_authed = False  # Track YouTube tool authorization
+        # Arcade client for YouTube search (optional)
+        try:
+            self.arcade_client = Arcade()
+            self._youtube_authed = False  # Track YouTube tool authorization
+        except Exception as e:
+            print(f"Warning: Arcade client not available: {e}")
+            self.arcade_client = None
+            self._youtube_authed = False
 
         # Create course_content directory if it doesn't exist
         self.course_content_dir = Path("course_content")

@@ -25,7 +25,8 @@ import logging
 
 logging.basicConfig(level=logging.DEBUG)
 
-app = Flask(__name__)
+FRONTEND_BUILD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend', 'build'))
+app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, 'static'), static_url_path='/static')
 app.secret_key = os.environ.get("SESSION_SECRET")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
@@ -1118,15 +1119,13 @@ def get_auth_user():
 
 from flask import send_from_directory
 
-FRONTEND_BUILD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'build')
-
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
-    if path != "" and os.path.exists(os.path.join(FRONTEND_BUILD_DIR, path)):
+    full_path = os.path.join(FRONTEND_BUILD_DIR, path)
+    if path != "" and os.path.exists(full_path) and not os.path.isdir(full_path):
         return send_from_directory(FRONTEND_BUILD_DIR, path)
-    else:
-        return send_from_directory(FRONTEND_BUILD_DIR, 'index.html')
+    return send_from_directory(FRONTEND_BUILD_DIR, 'index.html')
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)

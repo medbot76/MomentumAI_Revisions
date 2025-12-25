@@ -51,5 +51,9 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[ports]]
+localPort = 5000
+externalPort = 80
+
 [deployment.build]
 builder = "nixpacks" 
