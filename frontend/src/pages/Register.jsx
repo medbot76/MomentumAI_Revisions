@@ -46,8 +46,7 @@ function Register() {
             setMessage('Account created successfully! Redirecting...');
             // Redirect to home after successful registration
             setTimeout(() => {
-              navigate("/");
-              window.location.reload();
+              window.location.href = '/';
             }, 1000);
           } else {
             setMessage(data.error || 'Registration failed');

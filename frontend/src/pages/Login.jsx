@@ -36,12 +36,8 @@ function Login() {
           const data = await response.json();
           
           if (response.ok && data.user) {
-            // Login successful, redirect to home
-            // Small delay to ensure session cookie is set
-            setTimeout(() => {
-              navigate("/");
-              window.location.reload();
-            }, 100);
+            // Login successful, redirect to home with full page refresh
+            window.location.href = '/';
           } else {
             setMessage(data.error || 'Login failed');
           }
