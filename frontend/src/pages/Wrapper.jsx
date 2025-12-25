@@ -8,8 +8,8 @@ function Wrapper({children}) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading...</p>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-gray-900 mx-auto mb-4"></div>
+                    <p className="text-gray-600 font-medium">Loading...</p>
                 </div>
             </div>
         );
@@ -18,21 +18,32 @@ function Wrapper({children}) {
     if (!isAuthenticated) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
-                <div className="w-full max-w-sm bg-white rounded-xl shadow p-8 flex flex-col items-center border border-gray-200">
-                    <div className="flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-lg mb-4">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
+                <div className="w-full max-w-md mx-4">
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 md:p-12 flex flex-col items-center">
+                        {/* Logo */}
+                        <div className="flex items-center gap-3 mb-8">
+                            <img 
+                                src="/medbotlogonew.jpg" 
+                                alt="Momentum AI Logo" 
+                                className="w-10 h-10 rounded-xl object-cover"
+                            />
+                            <span className="font-semibold text-2xl text-gray-900">Momentum AI</span>
+                        </div>
+                        
+                        <h1 className="text-3xl font-semibold text-gray-900 mb-3 text-center">Welcome to MedBot</h1>
+                        <p className="text-gray-600 text-center mb-8 text-base">Your AI-powered medical study assistant</p>
+                        
+                        <button
+                            onClick={login}
+                            className="w-full bg-black text-white hover:bg-gray-800 font-medium py-3.5 px-6 rounded-xl transition-all duration-200 text-base"
+                        >
+                            Sign in to Continue
+                        </button>
+                        
+                        <p className="text-gray-500 text-sm mt-6 text-center">
+                            New here? You can create an account after signing in
+                        </p>
                     </div>
-                    <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to MedBot</h1>
-                    <p className="text-sm text-gray-500 mb-6 text-center">Your AI-powered medical study assistant</p>
-                    <button
-                        onClick={login}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
-                    >
-                        Sign in to Continue
-                    </button>
                 </div>
             </div>
         );
