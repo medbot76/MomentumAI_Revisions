@@ -47,6 +47,12 @@ psycopg2-binary
 requests
 tiktoken
 
+# Replit Auth dependencies
+Flask-SQLAlchemy
+Flask-Login
+Flask-Dance
+PyJWT
+
 # Web framework
 fastapi
 uvicorn
