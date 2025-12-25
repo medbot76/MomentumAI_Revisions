@@ -1,10 +1,16 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 
 function Wrapper({children}) {
-    const { user, isLoading, isAuthenticated, login } = useAuth();
+    const { isLoading, isAuthenticated } = useAuth();
     const navigate = useNavigate();
+    
+    useEffect(() => {
+        if (!isLoading && !isAuthenticated) {
+            navigate('/login');
+        }
+    }, [isLoading, isAuthenticated, navigate]);
     
     if (isLoading) {
         return (
@@ -18,46 +24,7 @@ function Wrapper({children}) {
     }
     
     if (!isAuthenticated) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-white">
-                <div className="w-full max-w-lg px-6 md:px-8 py-12 md:py-16 text-center">
-                    <div className="mb-8">
-                        <img 
-                            src="/medbotlogonew.jpg" 
-                            alt="Momentum AI" 
-                            className="w-8 h-8 rounded-md mx-auto"
-                        />
-                    </div>
-                    <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-4">Log in or sign up</h1>
-                    <p className="text-lg md:text-xl text-gray-600 mb-12">Get smarter responses and can upload files, images, and more.</p>
-                    
-                    <div className="space-y-3 mb-8">
-                        <button
-                            onClick={() => navigate('/login')}
-                            className="w-full border border-gray-300 hover:border-gray-400 text-gray-900 font-medium py-3.5 px-6 rounded-full transition-all duration-200 flex items-center justify-center gap-3"
-                        >
-                            <span className="text-lg">📧</span>
-                            Continue with Email
-                        </button>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 mb-8">
-                        <div className="flex-1 border-t border-gray-300"></div>
-                        <span className="text-sm text-gray-500 font-medium">OR</span>
-                        <div className="flex-1 border-t border-gray-300"></div>
-                    </div>
-                    
-                    <div className="space-y-3">
-                        <button
-                            onClick={() => navigate('/register')}
-                            className="w-full border border-gray-300 hover:border-gray-400 text-gray-900 font-medium py-3.5 px-6 rounded-full transition-all duration-200"
-                        >
-                            Sign up with Email
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
+        return null;
     }
     
     return <>{children}</>;
