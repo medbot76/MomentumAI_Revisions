@@ -49,16 +49,35 @@ import numpy as np
 import tiktoken
 from pydantic import BaseModel
 import google.generativeai as genai
-import pytesseract
-from transformers import BlipProcessor, BlipForConditionalGeneration
-import torch
 from supabase import create_client, Client
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
 import ast
-from sentence_transformers import SentenceTransformer
-import uuid
+
+try:
+    import pytesseract
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    PYTESSERACT_AVAILABLE = False
+    print("Warning: pytesseract not available (OCR disabled)")
+
+try:
+    import torch
+    from transformers import BlipProcessor, BlipForConditionalGeneration
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+    print("Warning: torch/transformers not available (BLIP model disabled)")
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    SentenceTransformer = None
+    print("Warning: sentence_transformers not available (local embeddings disabled)")
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -69,15 +88,19 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 ENCODER = tiktoken.get_encoding("cl100k_base")
 
 # Initialize BLIP model and processor
-try:
-    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
-    BLIP_AVAILABLE = True
-except Exception as e:
-    print(f"Warning: BLIP model initialization failed: {str(e)}")
-    BLIP_AVAILABLE = False
+BLIP_AVAILABLE = False
+processor = None
+model = None
+device = None
+if TORCH_AVAILABLE:
+    try:
+        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model.to(device)
+        BLIP_AVAILABLE = True
+    except Exception as e:
+        print(f"Warning: BLIP model initialization failed: {str(e)}")
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -107,6 +130,8 @@ _sentence_model = None
 def _get_sentence_model():
     """Get or initialize the sentence transformer model."""
     global _sentence_model
+    if not SENTENCE_TRANSFORMERS_AVAILABLE:
+        raise ImportError("sentence_transformers not available. Using API embeddings instead.")
     if _sentence_model is None:
         _sentence_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
     return _sentence_model
@@ -233,6 +258,8 @@ class RAGPipeline:
 
     def contains_text(self, image: Image.Image) -> bool:
         """Checks if the image contains any text using OCR with confidence filtering."""
+        if not PYTESSERACT_AVAILABLE:
+            return False
         try:
             gray_image = image.convert('L')
             data = pytesseract.image_to_data(gray_image, output_type=pytesseract.Output.DICT)

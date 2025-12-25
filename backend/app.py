@@ -3,7 +3,11 @@ from flask import Flask, request, jsonify, send_file, Response, session
 from flask_cors import CORS
 from med_bot3.chatbot import ChatBot
 from med_bot3.tts_elevenlabs import generate_teen_voice
-from med_bot3.stt_whisper import transcribe_audio
+try:
+    from med_bot3.stt_whisper import transcribe_audio
+except ImportError:
+    transcribe_audio = None
+    print("Warning: stt_whisper not available (requires torch)")
 from med_bot3.exam_feature.exam_generator import ExamGenerator, ExamConfig, Difficulty
 from med_bot3.rag_flashcards import RAGFlashcards
 from med_bot3.study_planner import StudyPlanner
@@ -470,6 +474,9 @@ async def tts():
 @async_route
 async def stt():
     try:
+        if transcribe_audio is None:
+            return jsonify({'error': 'Speech-to-text is not available (requires torch)'}), 503
+        
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
         

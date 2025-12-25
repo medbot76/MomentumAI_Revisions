@@ -60,7 +60,14 @@ except ImportError:
     print("Warning: playsound not available. Audio playback will be disabled.")
 import anthropic
 import multiprocessing
-from sentence_transformers import SentenceTransformer
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    SentenceTransformer = None
+    print("Warning: sentence_transformers not available in chatbot")
 
 def _play_audio(audio_path):
     from playsound import playsound
@@ -73,6 +80,8 @@ class ChatBot:
     @classmethod
     def _get_sentence_model(cls):
         """Get or initialize the sentence transformer model."""
+        if not SENTENCE_TRANSFORMERS_AVAILABLE:
+            raise ImportError("sentence_transformers not available")
         if cls._sentence_model is None:
             # Use same model as RAG pipeline for consistency
             cls._sentence_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
