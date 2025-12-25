@@ -87,6 +87,29 @@ if not supabase_url or not supabase_key:
 
 supabase: Client = create_client(supabase_url, supabase_key)
 
+def sync_user_to_supabase(user):
+    """Sync user to Supabase users table to satisfy foreign key constraints"""
+    try:
+        existing = supabase.table('users').select('id').eq('id', user.id).execute()
+        if not existing.data:
+            user_data = {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name or '',
+                'last_name': user.last_name or '',
+                'profile_image_url': user.profile_image_url or ''
+            }
+            supabase.table('users').insert(user_data).execute()
+            print(f"Synced user {user.id} to Supabase")
+        else:
+            supabase.table('users').update({
+                'email': user.email,
+                'first_name': user.first_name or '',
+                'last_name': user.last_name or ''
+            }).eq('id', user.id).execute()
+    except Exception as e:
+        print(f"Error syncing user to Supabase: {e}")
+
 chatbot = ChatBot(api_key)
 exam_generator = ExamGenerator(api_key)
 # Add StudyPlanner instance for API use
@@ -1165,9 +1188,10 @@ def login():
         
         # Log the user in using Flask-Login
         login_user(user, remember=True)
-        
-        # Ensure session is saved (session is already imported at top)
         session.permanent = True
+        
+        # Sync user to Supabase for foreign key constraints
+        sync_user_to_supabase(user)
         
         return jsonify({
             'user': {
@@ -1302,6 +1326,9 @@ def verify_email():
         # Log the user in
         login_user(user, remember=True)
         session.permanent = True
+        
+        # Sync user to Supabase for foreign key constraints
+        sync_user_to_supabase(user)
         
         return jsonify({
             'message': 'Email verified successfully!',
