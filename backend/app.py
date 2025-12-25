@@ -1,6 +1,7 @@
 # backend/app.py
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, session
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from med_bot3.chatbot import ChatBot
 from med_bot3.tts_elevenlabs import generate_teen_voice
 from med_bot3.stt_whisper import transcribe_audio
@@ -16,15 +17,49 @@ import datetime
 import uuid
 from functools import wraps
 from pathlib import Path
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+# Database configuration for Replit Auth (uses Replit PostgreSQL for sessions/users)
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    'pool_pre_ping': True,
+    "pool_recycle": 300,
+}
+
+# Initialize the auth database
+from auth_models import db
+db.init_app(app)
+
+# Create auth tables
+with app.app_context():
+    db.create_all()
+    logging.info("Auth database tables created")
+
+# Initialize Replit Auth
+from replit_auth import make_replit_blueprint, init_login_manager, require_login
+from flask_login import current_user
+
+init_login_manager(app)
+app.register_blueprint(make_replit_blueprint(), url_prefix="/auth")
+
+# Make session permanent
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
 
 # Configure CORS to allow all origins for development
 CORS(app, 
      origins="*",
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
-     supports_credentials=False)
+     supports_credentials=True)
 
 # Initialize components
 api_key = os.environ.get('GEMINI_API_KEY')
@@ -1070,6 +1105,35 @@ async def reprocess_document():
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'message': 'Backend is running'})
+
+# Auth API endpoints for frontend
+@app.route('/api/auth/user', methods=['GET'])
+def get_current_user():
+    """Get the current authenticated user"""
+    if current_user.is_authenticated:
+        return jsonify({
+            'authenticated': True,
+            'user': {
+                'id': current_user.id,
+                'email': current_user.email,
+                'first_name': current_user.first_name,
+                'last_name': current_user.last_name,
+                'profile_image_url': current_user.profile_image_url
+            }
+        })
+    return jsonify({'authenticated': False, 'user': None})
+
+@app.route('/api/auth/login', methods=['GET'])
+def login_redirect():
+    """Redirect to Replit Auth login"""
+    from flask import redirect, url_for
+    return redirect(url_for('replit_auth.login'))
+
+@app.route('/api/auth/logout', methods=['GET'])
+def logout_redirect():
+    """Redirect to Replit Auth logout"""
+    from flask import redirect, url_for
+    return redirect(url_for('replit_auth.logout'))
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)

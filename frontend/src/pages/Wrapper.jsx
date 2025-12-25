@@ -1,29 +1,43 @@
 import React, {useEffect, useState} from 'react'
-import supabase from '../helper/supabaseClient'
 import { Navigate } from 'react-router-dom'
+import { API_ENDPOINTS } from '../config'
 
 function Wrapper({children}) {
     const [authenticated, setAuthenticated] = useState(false)
+    const [user, setUser] = useState(null)
     const [loading, setLoading] = useState(true)
     
     useEffect(() => {
-        const getSession = async () => {
-            const {
-                data: {session},
-            } = await supabase.auth.getSession();
-
-            setAuthenticated(!!session);
+        const checkAuth = async () => {
+            try {
+                const response = await fetch(API_ENDPOINTS.AUTH_USER, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                
+                if (data.authenticated && data.user) {
+                    setAuthenticated(true);
+                    setUser(data.user);
+                } else {
+                    setAuthenticated(false);
+                    setUser(null);
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                setAuthenticated(false);
+                setUser(null);
+            }
             setLoading(false);
         };
 
-        getSession();
+        checkAuth();
     }, []);
 
     if (loading){
-        return <div>Loading...</div>
+        return <div className="flex items-center justify-center min-h-screen">Loading...</div>
     } else {
         if(authenticated){
-            return <>{children}</>
+            return React.cloneElement(children, { user });
         }
         return <Navigate to="/login"/>
     }
