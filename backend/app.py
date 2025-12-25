@@ -37,7 +37,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 300,
 }
 
-from models import db, User, EmailVerificationToken
+from models import db, User, EmailVerificationToken, Notebook, Document, Chunk
 db.init_app(app)
 
 from replit_auth import init_login_manager, make_replit_blueprint, get_current_user_api
@@ -87,29 +87,6 @@ if not supabase_url or not supabase_key:
 
 supabase: Client = create_client(supabase_url, supabase_key)
 
-def sync_user_to_supabase(user):
-    """Sync user to Supabase users table to satisfy foreign key constraints"""
-    try:
-        existing = supabase.table('users').select('id').eq('id', user.id).execute()
-        if not existing.data:
-            user_data = {
-                'id': user.id,
-                'email': user.email,
-                'first_name': user.first_name or '',
-                'last_name': user.last_name or '',
-                'profile_image_url': user.profile_image_url or ''
-            }
-            supabase.table('users').insert(user_data).execute()
-            print(f"Synced user {user.id} to Supabase")
-        else:
-            supabase.table('users').update({
-                'email': user.email,
-                'first_name': user.first_name or '',
-                'last_name': user.last_name or ''
-            }).eq('id', user.id).execute()
-    except Exception as e:
-        print(f"Error syncing user to Supabase: {e}")
-
 chatbot = ChatBot(api_key)
 exam_generator = ExamGenerator(api_key)
 # Add StudyPlanner instance for API use
@@ -119,25 +96,25 @@ study_planner = StudyPlanner(api_key)
 def get_or_create_notebook(user_id: str, notebook_name: str = "Default Notebook") -> str:
     """Get or create a notebook for the user"""
     try:
-        # Try to find existing notebook
-        result = supabase.table('notebooks').select('id').eq('user_id', user_id).eq('name', notebook_name).execute()
+        notebook = Notebook.query.filter_by(user_id=user_id, name=notebook_name).first()
         
-        if result.data:
-            return result.data[0]['id']
+        if notebook:
+            return notebook.id
         
-        # Create new notebook
-        notebook_data = {
-            'user_id': user_id,
-            'name': notebook_name,
-            'description': f'Default notebook for user {user_id}',
-            'color': '#4285f4'
-        }
-        result = supabase.table('notebooks').insert(notebook_data).execute()
-        return result.data[0]['id']
+        notebook = Notebook(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            name=notebook_name,
+            description=f'Default notebook for user {user_id}',
+            color='#4285f4'
+        )
+        db.session.add(notebook)
+        db.session.commit()
+        return notebook.id
     except Exception as e:
+        db.session.rollback()
         print(f"Error creating notebook: {e}")
-        # Return a default UUID if creation fails
-        return "65100e0f-0045-415f-a98a-c30180f2fc52"
+        return str(uuid.uuid4())
 
 def upload_to_supabase_storage(file_path: str, user_id: str, filename: str) -> str:
     """Upload file to Supabase storage and return the storage path"""
@@ -169,37 +146,40 @@ def create_document_record(user_id: str, notebook_id: str, filename: str, origin
                           file_type: str, file_size: int, storage_path: str) -> str:
     """Create a document record in the documents table"""
     try:
-        # Generate the public URL for the file
         public_url = f"{supabase_url}/storage/v1/object/public/documents/{storage_path}"
         
-        document_data = {
-            'user_id': user_id,
-            'notebook_id': notebook_id,
-            'filename': filename,
-            'original_filename': original_filename,
-            'file_type': file_type,
-            'file_size': file_size,
-            'storage_path': storage_path,
-            'file_path': public_url,  # Add the required file_path field
-            'processing_status': 'pending',
-            'metadata': {}
-        }
-        
-        result = supabase.table('documents').insert(document_data).execute()
-        return result.data[0]['id']
+        document = Document(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            notebook_id=notebook_id,
+            filename=filename,
+            original_filename=original_filename,
+            file_type=file_type,
+            file_size=file_size,
+            storage_path=storage_path,
+            file_path=public_url,
+            processing_status='pending',
+            doc_metadata={}
+        )
+        db.session.add(document)
+        db.session.commit()
+        return document.id
     except Exception as e:
+        db.session.rollback()
         print(f"Error creating document record: {e}")
         raise e
 
 def update_document_status(document_id: str, status: str, error: str = None):
     """Update document processing status"""
     try:
-        update_data = {'processing_status': status}
-        if error:
-            update_data['processing_error'] = error
-        
-        supabase.table('documents').update(update_data).eq('id', document_id).execute()
+        document = Document.query.get(document_id)
+        if document:
+            document.processing_status = status
+            if error:
+                document.processing_error = error
+            db.session.commit()
     except Exception as e:
+        db.session.rollback()
         print(f"Error updating document status: {e}")
 
 async def initialize_exam_generator():
@@ -468,22 +448,18 @@ async def upload_document():
 @app.route('/api/documents', methods=['GET'])
 def list_documents():
     try:
-        # Get user_id from query parameters
         user_id = request.args.get('user_id')
         notebook_id = request.args.get('notebook_id')
         
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
         
-        # Query documents from database
-        query = supabase.table('documents').select('*').eq('user_id', user_id)
-        
+        query = Document.query.filter_by(user_id=user_id)
         if notebook_id:
-            query = query.eq('notebook_id', notebook_id)
+            query = query.filter_by(notebook_id=notebook_id)
         
-        result = query.order('created_at', desc=True).execute()
-        
-        return jsonify({'documents': result.data})
+        documents = query.order_by(Document.created_at.desc()).all()
+        return jsonify({'documents': [d.to_dict() for d in documents]})
     except Exception as e:
         print(f"Documents Error: {e}")
         return jsonify({'error': str(e)}), 500
@@ -1042,8 +1018,8 @@ def list_notebooks():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
         
-        result = supabase.table('notebooks').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
-        return jsonify({'notebooks': result.data})
+        notebooks = Notebook.query.filter_by(user_id=user_id).order_by(Notebook.created_at.desc()).all()
+        return jsonify({'notebooks': [n.to_dict() for n in notebooks]})
     except Exception as e:
         print(f"Notebooks Error: {e}")
         return jsonify({'error': str(e)}), 500
@@ -1061,16 +1037,18 @@ def create_notebook():
         if not user_id or not name:
             return jsonify({'error': 'user_id and name are required'}), 400
         
-        notebook_data = {
-            'user_id': user_id,
-            'name': name,
-            'description': description,
-            'color': color
-        }
-        
-        result = supabase.table('notebooks').insert(notebook_data).execute()
-        return jsonify({'notebook': result.data[0]})
+        notebook = Notebook(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            name=name,
+            description=description,
+            color=color
+        )
+        db.session.add(notebook)
+        db.session.commit()
+        return jsonify({'notebook': notebook.to_dict()})
     except Exception as e:
+        db.session.rollback()
         print(f"Create Notebook Error: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -1082,14 +1060,15 @@ def delete_notebook(notebook_id):
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
         
-        # Delete notebook (cascade will handle documents and chunks)
-        result = supabase.table('notebooks').delete().eq('id', notebook_id).eq('user_id', user_id).execute()
-        
-        if not result.data:
+        notebook = Notebook.query.filter_by(id=notebook_id, user_id=user_id).first()
+        if not notebook:
             return jsonify({'error': 'Notebook not found or access denied'}), 404
         
+        db.session.delete(notebook)
+        db.session.commit()
         return jsonify({'message': 'Notebook deleted successfully'})
     except Exception as e:
+        db.session.rollback()
         print(f"Delete Notebook Error: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -1105,23 +1084,21 @@ async def reprocess_document():
         if not document_id:
             return jsonify({'error': 'Missing document_id'}), 400
             
-        # Get document info
-        result = supabase.table('documents').select('*').eq('id', document_id).execute()
-        if not result.data:
+        document = Document.query.get(document_id)
+        if not document:
             return jsonify({'error': 'Document not found'}), 404
             
-        document = result.data[0]
-        print(f"Reprocessing document: {document['filename']}")
+        print(f"Reprocessing document: {document.filename}")
         
-        # Check if it already has chunks
-        chunks_result = supabase.table('chunks').select('id').eq('document_id', document_id).limit(1).execute()
-        if chunks_result.data:
-            return jsonify({'message': 'Document already has chunks', 'chunk_count': len(chunks_result.data)})
+        existing_chunks = Chunk.query.filter_by(document_id=document_id).first()
+        if existing_chunks:
+            chunk_count = Chunk.query.filter_by(document_id=document_id).count()
+            return jsonify({'message': 'Document already has chunks', 'chunk_count': chunk_count})
         
         # Get the file from storage and reprocess
         try:
             # Download file from storage
-            file_data = supabase.storage.from_('documents').download(document['file_path'])
+            file_data = supabase.storage.from_('documents').download(document.storage_path)
             
             # Save to temporary file
             temp_path = f"/tmp/reprocess_{document_id}.pdf"
@@ -1129,7 +1106,7 @@ async def reprocess_document():
                 f.write(file_data)
             
             # Process with RAG
-            success = await chatbot.upload_document(temp_path, notebook_id=document['notebook_id'], user_id=user_id)
+            success = await chatbot.upload_document(temp_path, notebook_id=document.notebook_id, user_id=user_id)
             
             # Clean up
             if os.path.exists(temp_path):
@@ -1158,9 +1135,6 @@ def get_auth_user():
     """Get current authenticated user from Replit database"""
     user_data = get_current_user_api()
     if user_data:
-        # Sync user to Supabase on each auth check for existing sessions
-        if current_user.is_authenticated:
-            sync_user_to_supabase(current_user)
         return jsonify(user_data)
     return jsonify(None), 200
 
@@ -1192,9 +1166,6 @@ def login():
         # Log the user in using Flask-Login
         login_user(user, remember=True)
         session.permanent = True
-        
-        # Sync user to Supabase for foreign key constraints
-        sync_user_to_supabase(user)
         
         return jsonify({
             'user': {
@@ -1329,9 +1300,6 @@ def verify_email():
         # Log the user in
         login_user(user, remember=True)
         session.permanent = True
-        
-        # Sync user to Supabase for foreign key constraints
-        sync_user_to_supabase(user)
         
         return jsonify({
             'message': 'Email verified successfully!',

@@ -93,3 +93,96 @@ class EmailVerificationToken(db.Model):
     
     def verify_code(self, code: str) -> bool:
         return self.code_hash == self.hash_code(code)
+
+
+class Notebook(db.Model):
+    __tablename__ = 'notebooks'
+    id = db.Column(db.String, primary_key=True)
+    user_id = db.Column(db.String, db.ForeignKey(User.id), nullable=False)
+    name = db.Column(db.String, nullable=False)
+    description = db.Column(db.String, nullable=True)
+    color = db.Column(db.String, default='#4285f4')
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    user = db.relationship(User, backref='notebooks')
+    documents = db.relationship('Document', backref='notebook', cascade='all, delete-orphan')
+    chunks = db.relationship('Chunk', backref='notebook', cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'name': self.name,
+            'description': self.description,
+            'color': self.color,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class Document(db.Model):
+    __tablename__ = 'documents'
+    id = db.Column(db.String, primary_key=True)
+    user_id = db.Column(db.String, db.ForeignKey(User.id), nullable=False)
+    notebook_id = db.Column(db.String, db.ForeignKey('notebooks.id'), nullable=False)
+    filename = db.Column(db.String, nullable=False)
+    original_filename = db.Column(db.String, nullable=True)
+    file_type = db.Column(db.String, nullable=True)
+    file_size = db.Column(db.Integer, nullable=True)
+    storage_path = db.Column(db.String, nullable=True)
+    file_path = db.Column(db.String, nullable=True)
+    processing_status = db.Column(db.String, default='pending')
+    processing_error = db.Column(db.String, nullable=True)
+    doc_metadata = db.Column(db.JSON, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    user = db.relationship(User, backref='documents')
+    chunks = db.relationship('Chunk', backref='document', cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'notebook_id': self.notebook_id,
+            'filename': self.filename,
+            'original_filename': self.original_filename,
+            'file_type': self.file_type,
+            'file_size': self.file_size,
+            'storage_path': self.storage_path,
+            'file_path': self.file_path,
+            'processing_status': self.processing_status,
+            'processing_error': self.processing_error,
+            'metadata': self.doc_metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class Chunk(db.Model):
+    __tablename__ = 'chunks'
+    id = db.Column(db.String, primary_key=True)
+    user_id = db.Column(db.String, db.ForeignKey(User.id), nullable=False)
+    notebook_id = db.Column(db.String, db.ForeignKey('notebooks.id'), nullable=False)
+    document_id = db.Column(db.String, db.ForeignKey('documents.id'), nullable=True)
+    content = db.Column(db.Text, nullable=False)
+    tokens = db.Column(db.Integer, nullable=True)
+    embedding = db.Column(db.JSON, nullable=True)
+    chunk_metadata = db.Column(db.JSON, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    
+    user = db.relationship(User, backref='chunks')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'notebook_id': self.notebook_id,
+            'document_id': self.document_id,
+            'content': self.content,
+            'tokens': self.tokens,
+            'embedding': self.embedding,
+            'metadata': self.chunk_metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
