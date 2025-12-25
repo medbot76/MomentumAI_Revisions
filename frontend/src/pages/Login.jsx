@@ -54,6 +54,14 @@ function Login() {
           </svg>
         </button>
         
+        <div className="mb-8">
+          <img 
+            src="/medbotlogonew.jpg" 
+            alt="Momentum AI" 
+            className="w-8 h-8 rounded-md mx-auto"
+          />
+        </div>
+        
         <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3 text-center">Sign in</h1>
         <p className="text-lg text-gray-600 text-center mb-8">Welcome back! Please sign in to continue.</p>
         

@@ -21,6 +21,13 @@ function Wrapper({children}) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-white">
                 <div className="w-full max-w-lg px-6 md:px-8 py-12 md:py-16 text-center">
+                    <div className="mb-8">
+                        <img 
+                            src="/medbotlogonew.jpg" 
+                            alt="Momentum AI" 
+                            className="w-8 h-8 rounded-md mx-auto"
+                        />
+                    </div>
                     <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-4">Log in or sign up</h1>
                     <p className="text-lg md:text-xl text-gray-600 mb-12">Get smarter responses and can upload files, images, and more.</p>
                     
