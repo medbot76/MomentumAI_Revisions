@@ -37,7 +37,7 @@ function Register() {
             headers: {
               'Content-Type': 'application/json',
             },
-            credentials: 'include', // Important for session cookies
+            credentials: 'include',
             body: JSON.stringify({
               email,
               password,
@@ -46,10 +46,15 @@ function Register() {
           
           const data = await response.json();
           
-          if (response.ok && data.user) {
+          if (response.ok && data.requires_verification) {
+            setIsSuccess(true);
+            setMessage('Verification code sent! Check your email...');
+            setTimeout(() => {
+              navigate('/verify-email', { state: { email } });
+            }, 1500);
+          } else if (response.ok && data.user) {
             setIsSuccess(true);
             setMessage('Account created successfully! Redirecting...');
-            // Redirect to home after successful registration
             setTimeout(() => {
               window.location.href = '/';
             }, 1500);

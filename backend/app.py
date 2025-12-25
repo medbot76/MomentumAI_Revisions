@@ -37,11 +37,12 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 300,
 }
 
-from models import db
+from models import db, User, EmailVerificationToken
 db.init_app(app)
 
 from replit_auth import init_login_manager, make_replit_blueprint, get_current_user_api
 from flask_login import current_user, login_required, login_user
+from email_service import send_verification_email
 import jwt
 
 init_login_manager(app)
@@ -1149,11 +1150,18 @@ def login():
             return jsonify({'error': 'Email and password are required'}), 400
         
         # Find user by email in Replit database
-        from models import User
         user = User.query.filter_by(email=email).first()
         
         if not user or not user.check_password(password):
             return jsonify({'error': 'Invalid email or password'}), 401
+        
+        # Check if email is verified
+        if not user.is_email_verified:
+            return jsonify({
+                'error': 'Please verify your email before logging in',
+                'requires_verification': True,
+                'email': user.email
+            }), 403
         
         # Log the user in using Flask-Login
         login_user(user, remember=True)
@@ -1176,7 +1184,7 @@ def login():
 
 @app.route('/api/auth/signup', methods=['POST'])
 def signup():
-    """Replit database email/password signup endpoint"""
+    """Replit database email/password signup endpoint with email verification"""
     try:
         data = request.json
         email = data.get('email')
@@ -1188,26 +1196,115 @@ def signup():
             return jsonify({'error': 'Email and password are required'}), 400
         
         # Check if user already exists
-        from models import User
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
-            return jsonify({'error': 'Email already registered'}), 400
+            if existing_user.is_email_verified:
+                return jsonify({'error': 'Email already registered'}), 400
+            else:
+                # User exists but not verified - send new verification code
+                token, code = EmailVerificationToken.create_for_user(existing_user.id)
+                db.session.add(token)
+                db.session.commit()
+                
+                send_verification_email(email, code, first_name or existing_user.first_name)
+                
+                return jsonify({
+                    'message': 'Verification code sent to your email',
+                    'requires_verification': True,
+                    'email': email
+                })
         
-        # Create new user
+        # Create new user (unverified)
         user = User()
-        user.id = str(uuid.uuid4())  # Generate UUID for user ID
+        user.id = str(uuid.uuid4())
         user.email = email
         user.set_password(password)
         user.first_name = first_name
         user.last_name = last_name
+        user.is_email_verified = False
         
         db.session.add(user)
+        db.session.flush()  # Get user ID before creating token
+        
+        # Create verification token
+        token, code = EmailVerificationToken.create_for_user(user.id)
+        db.session.add(token)
+        db.session.commit()
+        
+        # Send verification email
+        email_sent = send_verification_email(email, code, first_name)
+        
+        return jsonify({
+            'message': 'Account created! Please check your email for a verification code.',
+            'requires_verification': True,
+            'email': email,
+            'email_sent': email_sent
+        })
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Signup error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/verify-email', methods=['POST'])
+def verify_email():
+    """Verify email with code"""
+    try:
+        data = request.json
+        email = data.get('email')
+        code = data.get('code')
+        
+        if not email or not code:
+            return jsonify({'error': 'Email and verification code are required'}), 400
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if user.is_email_verified:
+            return jsonify({'message': 'Email already verified'}), 200
+        
+        # Find latest unexpired token for user
+        token = EmailVerificationToken.query.filter_by(
+            user_id=user.id
+        ).filter(
+            EmailVerificationToken.consumed_at.is_(None)
+        ).order_by(
+            EmailVerificationToken.created_at.desc()
+        ).first()
+        
+        if not token:
+            return jsonify({'error': 'No verification code found. Please request a new one.'}), 400
+        
+        # Track attempt
+        token.attempt_count += 1
+        token.last_attempt_at = datetime.datetime.now()
+        
+        # Check max attempts (5)
+        if token.attempt_count > 5:
+            db.session.commit()
+            return jsonify({'error': 'Too many attempts. Please request a new code.'}), 429
+        
+        if token.is_expired():
+            db.session.commit()
+            return jsonify({'error': 'Verification code expired. Please request a new one.'}), 400
+        
+        if not token.verify_code(code):
+            db.session.commit()
+            return jsonify({'error': 'Invalid verification code'}), 400
+        
+        # Mark token as consumed and user as verified
+        token.consumed_at = datetime.datetime.now()
+        user.is_email_verified = True
+        user.email_verified_at = datetime.datetime.now()
         db.session.commit()
         
         # Log the user in
-        login_user(user)
+        login_user(user, remember=True)
+        session.permanent = True
         
         return jsonify({
+            'message': 'Email verified successfully!',
             'user': {
                 'id': user.id,
                 'email': user.email,
@@ -1218,7 +1315,57 @@ def signup():
         })
     except Exception as e:
         db.session.rollback()
-        logging.error(f"Signup error: {e}")
+        logging.error(f"Verify email error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/resend-verification', methods=['POST'])
+def resend_verification():
+    """Resend verification code with rate limiting"""
+    try:
+        data = request.json
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if user.is_email_verified:
+            return jsonify({'message': 'Email already verified'}), 200
+        
+        # Check cooldown (60 seconds)
+        last_token = EmailVerificationToken.query.filter_by(
+            user_id=user.id
+        ).order_by(
+            EmailVerificationToken.created_at.desc()
+        ).first()
+        
+        if last_token:
+            time_since_last = datetime.datetime.now() - last_token.created_at
+            if time_since_last.total_seconds() < 60:
+                remaining = 60 - int(time_since_last.total_seconds())
+                return jsonify({
+                    'error': f'Please wait {remaining} seconds before requesting a new code',
+                    'cooldown': remaining
+                }), 429
+        
+        # Create new token
+        token, code = EmailVerificationToken.create_for_user(user.id)
+        db.session.add(token)
+        db.session.commit()
+        
+        email_sent = send_verification_email(email, code, user.first_name)
+        
+        return jsonify({
+            'message': 'Verification code sent!',
+            'email_sent': email_sent
+        })
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Resend verification error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])

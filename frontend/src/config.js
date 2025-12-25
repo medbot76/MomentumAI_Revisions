@@ -23,6 +23,8 @@ export const API_ENDPOINTS = {
   AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
   AUTH_SIGNUP: `${API_BASE_URL}/api/auth/signup`,
   AUTH_LOGOUT: `${API_BASE_URL}/api/auth/logout`,
+  AUTH_VERIFY_EMAIL: `${API_BASE_URL}/api/auth/verify-email`,
+  AUTH_RESEND_VERIFICATION: `${API_BASE_URL}/api/auth/resend-verification`,
   LOGIN: `${API_BASE_URL}/auth/replit_auth`, // Replit auth (legacy)
   LOGOUT: `${API_BASE_URL}/auth/logout`, // Replit auth (legacy)
 }; 

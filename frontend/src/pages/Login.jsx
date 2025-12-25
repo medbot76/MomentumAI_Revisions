@@ -20,7 +20,7 @@ function Login() {
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Important for session cookies
+        credentials: 'include',
         body: JSON.stringify({
           email: email,
           password: password,
@@ -30,8 +30,9 @@ function Login() {
       const data = await response.json();
       
       if (response.ok && data.user) {
-        // Login successful, redirect to home with full page refresh
         window.location.href = '/';
+      } else if (data.requires_verification) {
+        navigate('/verify-email', { state: { email: data.email || email } });
       } else {
         setMessage(data.error || 'Login failed');
         setIsLoading(false);
