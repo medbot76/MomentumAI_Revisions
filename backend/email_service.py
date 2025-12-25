@@ -2,8 +2,8 @@ import os
 import requests
 
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
-FROM_EMAIL = 'noreply@momentumai.app'
-FROM_NAME = 'Momentum AI'
+FROM_EMAIL = 'ebad.khan5487@gmail.com'
+FROM_NAME = 'MedBot AI'
 
 
 def send_verification_email(to_email: str, verification_code: str, first_name: str = '') -> bool:
@@ -33,7 +33,7 @@ def send_verification_email(to_email: str, verification_code: str, first_name: s
                 </p>
                 
                 <p style="color: #333; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
-                    Thank you for signing up for Momentum AI! Please use the verification code below to complete your registration:
+                    Thank you for signing up for MedBot AI! Please use the verification code below to complete your registration:
                 </p>
                 
                 <div style="background-color: #f8f9fa; border-radius: 8px; padding: 24px; text-align: center; margin-bottom: 30px;">
@@ -41,13 +41,13 @@ def send_verification_email(to_email: str, verification_code: str, first_name: s
                 </div>
                 
                 <p style="color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
-                    This code will expire in 15 minutes. If you didn't create an account with Momentum AI, you can safely ignore this email.
+                    This code will expire in 15 minutes. If you didn't create an account with MedBot AI, you can safely ignore this email.
                 </p>
                 
                 <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
                 
                 <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
-                    Momentum AI - Your AI Study Assistant
+                    MedBot AI - Your AI Study Assistant
                 </p>
             </div>
         </div>
@@ -57,13 +57,13 @@ def send_verification_email(to_email: str, verification_code: str, first_name: s
     
     text_content = f"""{greeting}
 
-Thank you for signing up for Momentum AI! Please use the verification code below to complete your registration:
+Thank you for signing up for MedBot AI! Please use the verification code below to complete your registration:
 
 {verification_code}
 
-This code will expire in 15 minutes. If you didn't create an account with Momentum AI, you can safely ignore this email.
+This code will expire in 15 minutes. If you didn't create an account with MedBot AI, you can safely ignore this email.
 
-- Momentum AI Team
+- MedBot AI Team
 """
     
     payload = {
