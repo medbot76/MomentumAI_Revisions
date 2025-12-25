@@ -96,6 +96,12 @@ study_planner = StudyPlanner(api_key)
 def get_or_create_notebook(user_id: str, notebook_name: str = "Default Notebook") -> str:
     """Get or create a notebook for the user"""
     try:
+        user = User.query.get(user_id)
+        if not user:
+            user = User(id=user_id, email=None)
+            db.session.add(user)
+            db.session.flush()
+        
         notebook = Notebook.query.filter_by(user_id=user_id, name=notebook_name).first()
         
         if notebook:
@@ -1036,6 +1042,12 @@ def create_notebook():
         
         if not user_id or not name:
             return jsonify({'error': 'user_id and name are required'}), 400
+        
+        user = User.query.get(user_id)
+        if not user:
+            user = User(id=user_id, email=None)
+            db.session.add(user)
+            db.session.flush()
         
         notebook = Notebook(
             id=str(uuid.uuid4()),

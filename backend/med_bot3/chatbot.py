@@ -161,7 +161,7 @@ class ChatBot:
         """Get notebook ID by name, create if it doesn't exist"""
         try:
             from app import app
-            from models import db, Notebook
+            from models import db, Notebook, User
             import uuid
             
             with app.app_context():
@@ -176,6 +176,12 @@ class ChatBot:
                 if not user_id:
                     print("Warning: No user_id provided for notebook creation.")
                     return "default"
+                
+                user = User.query.get(user_id)
+                if not user:
+                    user = User(id=user_id, email=None)
+                    db.session.add(user)
+                    db.session.flush()
                 
                 new_notebook = Notebook(
                     id=str(uuid.uuid4()),
