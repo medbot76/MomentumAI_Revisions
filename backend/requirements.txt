@@ -32,6 +32,7 @@ supabase
 psycopg2-binary
 requests
 tiktoken
+pgvector
 
 # Replit Auth dependencies
 Flask-SQLAlchemy

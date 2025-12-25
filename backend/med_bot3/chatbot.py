@@ -160,46 +160,39 @@ class ChatBot:
     def get_notebook_by_name(self, notebook_name: str = "Default Notebook", user_id: str = None) -> str:
         """Get notebook ID by name, create if it doesn't exist"""
         try:
-            # Import supabase here to avoid circular imports
-            from supabase import create_client, Client
-            import os
+            from app import app
+            from models import db, Notebook
+            import uuid
             
-            # Get Supabase credentials
-            supabase_url = os.getenv("SUPABASE_URL")
-            supabase_key = os.getenv("SUPABASE_ANON_KEY")
-            
-            if not supabase_url or not supabase_key:
-                print("Warning: Supabase credentials not found. Using default notebook ID.")
-                return "default"
-            
-            supabase: Client = create_client(supabase_url, supabase_key)
-            
-            # Try to find existing notebook
-            if user_id:
-                result = supabase.table('notebooks').select('id').eq('user_id', user_id).eq('name', notebook_name).execute()
-            else:
-                result = supabase.table('notebooks').select('id').eq('name', notebook_name).execute()
-            
-            if result.data:
-                return result.data[0]['id']
-            
-            # Create new notebook if it doesn't exist
-            notebook_data = {
-                'name': notebook_name,
-                'description': f'Default notebook: {notebook_name}',
-                'color': '#4285f4'
-            }
-            
-            if user_id:
-                notebook_data['user_id'] = user_id
-            
-            result = supabase.table('notebooks').insert(notebook_data).execute()
-            return result.data[0]['id']
+            with app.app_context():
+                if user_id:
+                    notebook = Notebook.query.filter_by(user_id=user_id, name=notebook_name).first()
+                else:
+                    notebook = Notebook.query.filter_by(name=notebook_name).first()
+                
+                if notebook:
+                    return notebook.id
+                
+                if not user_id:
+                    print("Warning: No user_id provided for notebook creation.")
+                    return "default"
+                
+                new_notebook = Notebook(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    name=notebook_name,
+                    description=f'Default notebook: {notebook_name}',
+                    color='#4285f4'
+                )
+                db.session.add(new_notebook)
+                db.session.commit()
+                return new_notebook.id
             
         except Exception as e:
             print(f"Error getting/creating notebook: {e}")
-            # Return a default UUID if creation fails
-            return "65100e0f-0045-415f-a98a-c30180f2fc52"
+            import traceback
+            traceback.print_exc()
+            return "default"
 
     # --- Keyword extraction and follow-up detection helpers ---
     STOPWORDS = set([
