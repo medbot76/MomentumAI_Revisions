@@ -41,7 +41,7 @@ from models import db
 db.init_app(app)
 
 from replit_auth import init_login_manager, make_replit_blueprint, get_current_user_api
-from flask_login import current_user, login_required
+from flask_login import current_user, login_required, login_user
 import jwt
 
 init_login_manager(app)
