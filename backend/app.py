@@ -1158,6 +1158,9 @@ def get_auth_user():
     """Get current authenticated user from Replit database"""
     user_data = get_current_user_api()
     if user_data:
+        # Sync user to Supabase on each auth check for existing sessions
+        if current_user.is_authenticated:
+            sync_user_to_supabase(current_user)
         return jsonify(user_data)
     return jsonify(None), 200
 
