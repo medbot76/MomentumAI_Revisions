@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import supabase from '../helper/supabaseClient';
-import { Link } from 'react-router-dom';
+import { API_ENDPOINTS } from '../config';
+import { Link, useNavigate } from 'react-router-dom';
 
 // Camera icon from Home.jsx
 const Camera = ({ className = "w-8 h-8" }) => (
@@ -11,7 +11,7 @@ const Camera = ({ className = "w-8 h-8" }) => (
 );
 
 function Register() {
-
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,16 +27,33 @@ function Register() {
             return;
         }
 
-        const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-        });
-        if (error) {
-            setMessage(error.message);
-            return;
-        } 
-        if (data) {
-            setMessage('Account created successfully');
+        try {
+          const response = await fetch(API_ENDPOINTS.AUTH_SIGNUP, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include', // Important for session cookies
+            body: JSON.stringify({
+              email,
+              password,
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (response.ok && data.user) {
+            setMessage('Account created successfully! Redirecting...');
+            // Redirect to home after successful registration
+            setTimeout(() => {
+              navigate("/");
+              window.location.reload();
+            }, 1000);
+          } else {
+            setMessage(data.error || 'Registration failed');
+          }
+        } catch (error) {
+          setMessage(error.message || 'An error occurred');
         }
         
         setEmail('');

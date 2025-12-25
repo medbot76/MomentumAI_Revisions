@@ -42,11 +42,12 @@ db.init_app(app)
 
 from replit_auth import init_login_manager, make_replit_blueprint, get_current_user_api
 from flask_login import current_user, login_required
+import jwt
 
 init_login_manager(app)
 
 def get_authenticated_user_id():
-    """Get user_id from current_user session, prioritizing authenticated session over client-supplied ID"""
+    """Get user_id from current_user session (Replit database authentication)"""
     if current_user.is_authenticated:
         return current_user.id
     return None
@@ -60,6 +61,10 @@ app.register_blueprint(make_replit_blueprint(), url_prefix="/auth")
 @app.before_request
 def make_session_permanent():
     session.permanent = True
+    # Configure session cookie settings for cross-origin requests
+    app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Configure CORS to allow all origins for development
 CORS(app, 
@@ -1126,10 +1131,106 @@ def health_check():
 
 @app.route('/api/auth/user', methods=['GET'])
 def get_auth_user():
+    """Get current authenticated user from Replit database"""
     user_data = get_current_user_api()
     if user_data:
         return jsonify(user_data)
     return jsonify(None), 200
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Replit database email/password login endpoint"""
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+        
+        # Find user by email in Replit database
+        from models import User
+        user = User.query.filter_by(email=email).first()
+        
+        if not user or not user.check_password(password):
+            return jsonify({'error': 'Invalid email or password'}), 401
+        
+        # Log the user in using Flask-Login
+        login_user(user, remember=True)
+        
+        # Ensure session is saved (session is already imported at top)
+        session.permanent = True
+        
+        return jsonify({
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name or '',
+                'last_name': user.last_name or '',
+                'profile_image_url': user.profile_image_url or ''
+            }
+        })
+    except Exception as e:
+        logging.error(f"Login error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/signup', methods=['POST'])
+def signup():
+    """Replit database email/password signup endpoint"""
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+        
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+        
+        # Check if user already exists
+        from models import User
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            return jsonify({'error': 'Email already registered'}), 400
+        
+        # Create new user
+        user = User()
+        user.id = str(uuid.uuid4())  # Generate UUID for user ID
+        user.email = email
+        user.set_password(password)
+        user.first_name = first_name
+        user.last_name = last_name
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        # Log the user in
+        login_user(user)
+        
+        return jsonify({
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name or '',
+                'last_name': user.last_name or '',
+                'profile_image_url': user.profile_image_url or ''
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Signup error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout_replit():
+    """Replit database logout endpoint"""
+    try:
+        from flask_login import logout_user as flask_logout_user
+        flask_logout_user()
+        return jsonify({'message': 'Logged out successfully'})
+    except Exception as e:
+        logging.error(f"Logout error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 from flask import send_from_directory
 

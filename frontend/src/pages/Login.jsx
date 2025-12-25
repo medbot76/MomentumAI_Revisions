@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import supabase from '../helper/supabaseClient'
+import { API_ENDPOINTS } from '../config'
 import { Link, useNavigate } from 'react-router-dom';
 
 // Camera icon from Home.jsx
@@ -19,17 +19,34 @@ function Login() {
     const handleSubmit = async (event) => {
         event.preventDefault();
         setMessage("");
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: email,
-            password: password,
-        })
-        if (error){
-            setMessage(error.message);
-            return;
-        }
-        if(data){
-            navigate("/");
-            return null;
+        
+        try {
+          const response = await fetch(API_ENDPOINTS.AUTH_LOGIN, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include', // Important for session cookies
+            body: JSON.stringify({
+              email: email,
+              password: password,
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (response.ok && data.user) {
+            // Login successful, redirect to home
+            // Small delay to ensure session cookie is set
+            setTimeout(() => {
+              navigate("/");
+              window.location.reload();
+            }, 100);
+          } else {
+            setMessage(data.error || 'Login failed');
+          }
+        } catch (error) {
+          setMessage(error.message || 'An error occurred');
         }
 
         setEmail("");

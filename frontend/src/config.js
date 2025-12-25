@@ -20,6 +20,9 @@ export const API_ENDPOINTS = {
   STUDYPLAN_UPLOAD: `${API_BASE_URL}/api/studyplan-upload`,
   STUDYPLAN_ADD_TO_CALENDAR: `${API_BASE_URL}/api/studyplan/add-to-calendar`,
   AUTH_USER: `${API_BASE_URL}/api/auth/user`,
-  LOGIN: `${API_BASE_URL}/auth/replit_auth`,
-  LOGOUT: `${API_BASE_URL}/auth/logout`,
+  AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
+  AUTH_SIGNUP: `${API_BASE_URL}/api/auth/signup`,
+  AUTH_LOGOUT: `${API_BASE_URL}/api/auth/logout`,
+  LOGIN: `${API_BASE_URL}/auth/replit_auth`, // Replit auth (legacy)
+  LOGOUT: `${API_BASE_URL}/auth/logout`, // Replit auth (legacy)
 }; 

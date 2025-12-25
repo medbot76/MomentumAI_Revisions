@@ -11,12 +11,17 @@ export function useAuth() {
 
   const fetchUser = async () => {
     try {
+      // Fetch user from Replit database via backend
       const response = await fetch(API_ENDPOINTS.AUTH_USER, {
-        credentials: 'include'
+        credentials: 'include', // Important for session cookies
       });
       if (response.ok) {
         const data = await response.json();
-        setUser(data);
+        if (data) {
+          setUser(data);
+        } else {
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -29,11 +34,24 @@ export function useAuth() {
   };
 
   const login = () => {
-    window.location.href = API_ENDPOINTS.LOGIN;
+    // Redirect to login page
+    window.location.href = '/login';
   };
 
-  const logout = () => {
-    window.location.href = API_ENDPOINTS.LOGOUT;
+  const logout = async () => {
+    try {
+      // Call backend logout endpoint
+      await fetch(API_ENDPOINTS.AUTH_LOGOUT, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      setUser(null);
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Error logging out:', error);
+      setUser(null);
+      window.location.href = '/login';
+    }
   };
 
   return {
