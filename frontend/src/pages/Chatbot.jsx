@@ -8,6 +8,7 @@ import Flashcards from './Flashcards';
 import StudyPlanner from './StudyPlanner';
 import clsx from 'clsx';
 import supabase from '../helper/supabaseClient';
+import { useAuth } from '../hooks/useAuth';
 //hi
 // Unified Input Component - moved outside to prevent recreation on every render
 const UnifiedInputComponent = ({ 
@@ -732,8 +733,10 @@ function Chatbot({
   isExamFullscreen: propIsExamFullscreen,
   setIsExamFullscreen: propSetIsExamFullscreen,
   currentNotebookId: propCurrentNotebookId,
-  user
+  user: propUser
 }) {
+  const { user: authUser, isLoading: isAuthLoading } = useAuth();
+  const user = propUser || authUser;
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1030,8 +1033,6 @@ function Chatbot({
   // Get or create notebook for the current chat
   const getOrCreateNotebook = async (notebookName = 'Default Notebook') => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user?.id) {
         return null;
       }
@@ -1076,7 +1077,6 @@ function Chatbot({
   const fetchUserFiles = async () => {
     try {
       setLoadingFiles(true);
-      const { data: { user } } = await supabase.auth.getUser();
       
       if (!user?.id) {
         setSupabaseFiles([]);
@@ -1147,7 +1147,6 @@ function Chatbot({
         setCurrentNotebookId(propCurrentNotebookId);
         // Fetch notebook name
         try {
-          const { data: { user } } = await supabase.auth.getUser();
           if (user?.id) {
             const { data: notebook } = await supabase
               .from('notebooks')
@@ -1197,7 +1196,6 @@ function Chatbot({
       // Fetch notebook name and files
       const fetchNotebookData = async () => {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
           if (user?.id) {
             // Fetch notebook name
             const { data: notebook } = await supabase
@@ -1314,7 +1312,6 @@ function Chatbot({
 
       // Fetch fresh files for the current notebook
       console.log('Fetching fresh files for current notebook...');
-      const { data: { user } } = await supabase.auth.getUser();
       
       if (!user?.id) {
         setFlashcards(prev => prev.map(card =>
@@ -1377,19 +1374,12 @@ function Chatbot({
 
       try {
         // Get user and notebook info
-        let userId = 'web-user';
+        const userId = user?.id;
         let notebookId = currentNotebookId;
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.id) {
-            userId = user.id;
-            // Use current notebook ID, or get default if not set
-            if (!notebookId) {
-              const notebook = await getOrCreateNotebook('Default Notebook');
-              notebookId = notebook?.id || null;
-            }
-          }
-        } catch (_) {}
+        if (user?.id && !notebookId) {
+          const notebook = await getOrCreateNotebook('Default Notebook');
+          notebookId = notebook?.id || null;
+        }
 
         const response = await fetch(API_ENDPOINTS.FLASHCARDS, {
           method: 'POST',
@@ -1462,19 +1452,12 @@ function Chatbot({
       if (streamingEnabled) {
         // Use streaming endpoint
         // Ensure we pass user_id and notebook_id expected by backend
-        let userId = 'web-user';
+        const userId = user?.id;
         let notebookId = currentNotebookId;
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.id) {
-            userId = user.id;
-            // Use current notebook ID, or get default if not set
-            if (!notebookId) {
-              const notebook = await getOrCreateNotebook('Default Notebook');
-              notebookId = notebook?.id || null;
-            }
-          }
-        } catch (_) {}
+        if (user?.id && !notebookId) {
+          const notebook = await getOrCreateNotebook('Default Notebook');
+          notebookId = notebook?.id || null;
+        }
         response = await fetch(API_ENDPOINTS.CHAT_STREAM, {
           method: 'POST',
           headers: {
@@ -1620,19 +1603,12 @@ function Chatbot({
       } else {
         // Use regular endpoint
         // Ensure we pass user_id and notebook_id expected by backend
-        let userId = 'web-user';
+        const userId = user?.id;
         let notebookId = currentNotebookId;
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.id) {
-            userId = user.id;
-            // Use current notebook ID, or get default if not set
-            if (!notebookId) {
-              const notebook = await getOrCreateNotebook('Default Notebook');
-              notebookId = notebook?.id || null;
-            }
-          }
-        } catch (_) {}
+        if (user?.id && !notebookId) {
+          const notebook = await getOrCreateNotebook('Default Notebook');
+          notebookId = notebook?.id || null;
+        }
         response = await fetch(API_ENDPOINTS.CHAT, {
           method: 'POST',
           headers: {
@@ -1756,13 +1732,7 @@ function Chatbot({
       console.log('Reprocessing document:', documentId);
       
       // Get user info
-      let userId = 'web-user';
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.id) {
-          userId = user.id;
-        }
-      } catch (_) {}
+      const userId = user?.id;
 
       const response = await fetch('/api/reprocess-document', {
         method: 'POST',
@@ -1809,9 +1779,8 @@ function Chatbot({
 
     // 1. Upload to Supabase Storage and insert metadata
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       // Store files under a per-user folder to satisfy common storage RLS policies
-      const filePath = `${user.id}/${Date.now()}_${file.name}`;
+      const filePath = `${user?.id || 'anonymous'}/${Date.now()}_${file.name}`;
       console.log('Current user:', user);
       console.log('User ID:', user?.id);
       console.log('User email:', user?.email);
@@ -1908,20 +1877,17 @@ function Chatbot({
     try {
       const formData = new FormData();
       formData.append('file', file);
-      try {
-        // Include user_id so backend can write rows under correct user for RLS
-        const { data: { user: backendUser } } = await supabase.auth.getUser();
-        if (backendUser?.id) {
-          formData.append('user_id', backendUser.id);
-        }
-        // Include notebook_id so chunks are stored under the correct notebook
-        if (currentNotebookId) {
-          formData.append('notebook_id', currentNotebookId);
-          console.log('Uploading file with notebook_id:', currentNotebookId);
-        } else {
-          console.warn('No currentNotebookId set, backend will use default notebook');
-        }
-      } catch (_) {}
+      // Include user_id so backend can write rows under correct user for RLS
+      if (user?.id) {
+        formData.append('user_id', user.id);
+      }
+      // Include notebook_id so chunks are stored under the correct notebook
+      if (currentNotebookId) {
+        formData.append('notebook_id', currentNotebookId);
+        console.log('Uploading file with notebook_id:', currentNotebookId);
+      } else {
+        console.warn('No currentNotebookId set, backend will use default notebook');
+      }
       const response = await fetch(API_ENDPOINTS.UPLOAD, {
         method: 'POST',
         body: formData,

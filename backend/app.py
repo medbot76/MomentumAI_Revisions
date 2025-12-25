@@ -41,9 +41,15 @@ from models import db
 db.init_app(app)
 
 from replit_auth import init_login_manager, make_replit_blueprint, get_current_user_api
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 init_login_manager(app)
+
+def get_authenticated_user_id():
+    """Get user_id from current_user session, prioritizing authenticated session over client-supplied ID"""
+    if current_user.is_authenticated:
+        return current_user.id
+    return None
 
 with app.app_context():
     db.create_all()
@@ -218,14 +224,16 @@ async def chat():
     try:
         data = request.json
         question = data.get('message')
-        user_id = data.get('user_id')
         notebook_id = data.get('notebook_id')
+        
+        # Use authenticated user_id from session, ignore client-supplied value
+        user_id = get_authenticated_user_id()
         
         if not question:
             return jsonify({'error': 'No message provided'}), 400
         
         if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
+            return jsonify({'error': 'Authentication required'}), 401
         
         # Get or create notebook if not provided
         if not notebook_id:
@@ -253,14 +261,16 @@ async def chat_stream():
     try:
         data = request.json
         question = data.get('message')
-        user_id = data.get('user_id')
         notebook_id = data.get('notebook_id')
+        
+        # Use authenticated user_id from session, ignore client-supplied value
+        user_id = get_authenticated_user_id()
         
         if not question:
             return jsonify({'error': 'No message provided'}), 400
         
         if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
+            return jsonify({'error': 'Authentication required'}), 401
         
         # Get or create notebook if not provided
         if not notebook_id:
@@ -319,15 +329,15 @@ async def upload_document():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        # Get user_id and notebook_id from form data
-        user_id = request.form.get('user_id')
+        # Use authenticated user_id from session, ignore client-supplied value
+        user_id = get_authenticated_user_id()
         notebook_id = request.form.get('notebook_id')
         notebook_name = request.form.get('notebook_name', 'Default Notebook')
         
         print(f"/api/upload user_id: {user_id}, notebook_id: {notebook_id}")
         
         if not user_id:
-            return jsonify({'error': 'Missing user_id (authentication required)'}), 401
+            return jsonify({'error': 'Authentication required'}), 401
         
         # Get or create notebook
         if not notebook_id:
@@ -613,7 +623,11 @@ async def flashcards():
         filename = data.get('filename')
         num_cards = int(data.get('num_cards', 8))
         notebook_id = data.get('notebook_id')
-        user_id = data.get('user_id', 'web-user')
+        
+        # Use authenticated user_id from session
+        user_id = get_authenticated_user_id()
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
         
         print(f"Topic: {topic}, Filename: {filename}, Num cards: {num_cards}, Notebook: {notebook_id}")  # Debug log
         

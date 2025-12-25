@@ -10,7 +10,6 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import { API_ENDPOINTS } from "../config";
 import clsx from "clsx";
-import supabase from "../helper/supabaseClient";
 
 function Exam({
   initialPrompt,
@@ -179,19 +178,9 @@ function Exam({
     setExamState("display");
 
     try {
-      // Get user_id and notebook_id
-      let userIdToUse = userId || 'web-user';
-      let notebookIdToUse = notebookId;
-      
-      // Try to get user from Supabase if not provided
-      if (!userId) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.id) {
-            userIdToUse = user.id;
-          }
-        } catch (_) {}
-      }
+      // Get user_id and notebook_id (userId is passed from parent via Replit Auth)
+      const userIdToUse = userId;
+      const notebookIdToUse = notebookId;
       
       // First, get the exam content as text
       const contentResponse = await fetch(API_ENDPOINTS.EXAM_PDF, {
