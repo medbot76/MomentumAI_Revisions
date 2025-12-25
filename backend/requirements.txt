@@ -38,8 +38,6 @@ pydub
 ffmpeg-python
 webrtcvad
 SpeechRecognition
-pyaudio
-playsound
 
 # Database and API
 supabase

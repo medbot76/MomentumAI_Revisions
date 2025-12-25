@@ -731,7 +731,8 @@ function Chatbot({
   setIsExamSettingsClosing: propSetIsExamSettingsClosing,
   isExamFullscreen: propIsExamFullscreen,
   setIsExamFullscreen: propSetIsExamFullscreen,
-  currentNotebookId: propCurrentNotebookId
+  currentNotebookId: propCurrentNotebookId,
+  user
 }) {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');

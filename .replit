@@ -27,5 +27,29 @@ syntax = "python"
 [languages.python3.languageServer]
 start = [ "python3", "-m", "pylsp" ]
 
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "MedBot App"
+
+[[workflows.workflow]]
+name = "MedBot App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash start.sh"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [deployment.build]
 builder = "nixpacks" 

@@ -1,5 +1,5 @@
 # backend/app.py
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, session
 from flask_cors import CORS
 from med_bot3.chatbot import ChatBot
 from med_bot3.tts_elevenlabs import generate_teen_voice
@@ -16,15 +16,46 @@ import datetime
 import uuid
 from functools import wraps
 from pathlib import Path
+from werkzeug.middleware.proxy_fix import ProxyFix
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    'pool_pre_ping': True,
+    "pool_recycle": 300,
+}
+
+from models import db
+db.init_app(app)
+
+from replit_auth import init_login_manager, make_replit_blueprint, get_current_user_api
+from flask_login import current_user
+
+init_login_manager(app)
+
+with app.app_context():
+    db.create_all()
+    logging.info("Database tables created")
+
+app.register_blueprint(make_replit_blueprint(), url_prefix="/auth")
+
+@app.before_request
+def make_session_permanent():
+    session.permanent = True
 
 # Configure CORS to allow all origins for development
 CORS(app, 
      origins="*",
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Credentials"],
-     supports_credentials=False)
+     supports_credentials=True)
 
 # Initialize components
 api_key = os.environ.get('GEMINI_API_KEY')
@@ -1070,6 +1101,25 @@ async def reprocess_document():
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'message': 'Backend is running'})
+
+@app.route('/api/auth/user', methods=['GET'])
+def get_auth_user():
+    user_data = get_current_user_api()
+    if user_data:
+        return jsonify(user_data)
+    return jsonify(None), 200
+
+from flask import send_from_directory
+
+FRONTEND_BUILD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'build')
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    if path != "" and os.path.exists(os.path.join(FRONTEND_BUILD_DIR, path)):
+        return send_from_directory(FRONTEND_BUILD_DIR, path)
+    else:
+        return send_from_directory(FRONTEND_BUILD_DIR, 'index.html')
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)

@@ -6,6 +6,7 @@ import '../App.css';
 
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS } from '../config';
+import { useAuth } from '../hooks/useAuth';
 import supabase from '../helper/supabaseClient';
 import Chatbot from './Chatbot';
 
@@ -469,7 +470,7 @@ const chatHistory = [
     const [selectedMode, setSelectedMode] = useState('drag-drop');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isDropdownClosing, setIsDropdownClosing] = useState(false);
-    const [voiceEnabled, setVoiceEnabled] = useState(true); // Enable voice by default
+    const [voiceEnabled, setVoiceEnabled] = useState(true);
     
     // Voice panel state
     const [voicePanelOpen, setVoicePanelOpen] = useState(false);
@@ -503,17 +504,15 @@ const chatHistory = [
     const [currentNotebookName, setCurrentNotebookName] = useState('Default Notebook');
   
     const navigate = useNavigate();
-    const signOut = async () => {
-      const {error} = await supabase.auth.signOut();
-      if (error) throw error;
-      navigate("/login");
-    }
+    const { user, logout } = useAuth();
+
+    const signOut = () => {
+      logout();
+    };
 
     // Get or create notebook for the current chat
     const getOrCreateNotebook = async (notebookName = 'Default Notebook') => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        
         if (!user?.id) {
           return null;
         }
@@ -557,7 +556,6 @@ const chatHistory = [
     // Load available notebooks
     const loadAvailableNotebooks = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
         if (!user?.id) return;
 
         const { data: notebooks } = await supabase
@@ -575,6 +573,7 @@ const chatHistory = [
     // Initialize default notebook on mount
     useEffect(() => {
       const initializeDefaultNotebook = async () => {
+        if (!user?.id) return;
         const notebook = await getOrCreateNotebook('Default Notebook');
         if (notebook) {
           setCurrentNotebookId(notebook.id);
@@ -584,7 +583,7 @@ const chatHistory = [
         await loadAvailableNotebooks();
       };
       initializeDefaultNotebook();
-    }, []);
+    }, [user]);
 
     // Handle new chat creation (from sidebar)
     const handleNewChat = () => {
@@ -1364,6 +1363,7 @@ const chatHistory = [
             isExamFullscreen={isExamFullscreen}
             setIsExamFullscreen={setIsExamFullscreen}
             currentNotebookId={currentNotebookId}
+            user={user}
           />
         </div>
 
