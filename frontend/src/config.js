@@ -23,13 +23,9 @@ export const API_ENDPOINTS = {
   HEALTH: `${API_BASE_URL}/api/health`,
   EXAM_PDF: `${API_BASE_URL}/api/exam-pdf`,
   FLASHCARDS: `${API_BASE_URL}/api/flashcards`,
-  MODELS: `${API_BASE_URL}/api/models`,
-  SET_MODEL: `${API_BASE_URL}/api/model`,
+  MODELS: `${API_BASE_URL}/api/models`, // List available models
+  SET_MODEL: `${API_BASE_URL}/api/model`, // Set current model
   STUDYPLAN: `${API_BASE_URL}/api/studyplan`,
   STUDYPLAN_UPLOAD: `${API_BASE_URL}/api/studyplan-upload`,
   STUDYPLAN_ADD_TO_CALENDAR: `${API_BASE_URL}/api/studyplan/add-to-calendar`,
-  AUTH_USER: `${API_BASE_URL}/api/auth/user`,
-  AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
-  AUTH_LOGOUT: `${API_BASE_URL}/api/auth/logout`,
-  NOTEBOOKS: `${API_BASE_URL}/api/notebooks`,
 }; 

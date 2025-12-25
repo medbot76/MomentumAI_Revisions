@@ -458,7 +458,7 @@ const chatHistory = [
     );
   };
   
-  function Home({ user }) {
+  function Home() {
     const [messages, setMessages] = useState([]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -469,7 +469,7 @@ const chatHistory = [
     const [selectedMode, setSelectedMode] = useState('drag-drop');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isDropdownClosing, setIsDropdownClosing] = useState(false);
-    const [voiceEnabled, setVoiceEnabled] = useState(true);
+    const [voiceEnabled, setVoiceEnabled] = useState(true); // Enable voice by default
     
     // Voice panel state
     const [voicePanelOpen, setVoicePanelOpen] = useState(false);
@@ -503,65 +503,70 @@ const chatHistory = [
     const [currentNotebookName, setCurrentNotebookName] = useState('Default Notebook');
   
     const navigate = useNavigate();
-    const signOut = () => {
-      window.location.href = API_ENDPOINTS.AUTH_LOGOUT;
+    const signOut = async () => {
+      const {error} = await supabase.auth.signOut();
+      if (error) throw error;
+      navigate("/login");
     }
 
-    // Get or create notebook for the current chat (via backend API)
+    // Get or create notebook for the current chat
     const getOrCreateNotebook = async (notebookName = 'Default Notebook') => {
       try {
+        const { data: { user } } = await supabase.auth.getUser();
+        
         if (!user?.id) {
           return null;
         }
 
-        // First try to find existing notebook via API
-        const listResponse = await fetch(`${API_ENDPOINTS.NOTEBOOKS}?user_id=${user.id}`, {
-          credentials: 'include'
-        });
-        const listData = await listResponse.json();
-        const existingNotebook = listData.notebooks?.find(n => n.name === notebookName);
+        // Try to find existing notebook with this name
+        const { data: notebooks } = await supabase
+          .from('notebooks')
+          .select('id, name')
+          .eq('user_id', user.id)
+          .eq('name', notebookName)
+          .limit(1);
         
-        if (existingNotebook) {
-          return existingNotebook;
+        if (notebooks && notebooks.length > 0) {
+          return notebooks[0];
         }
 
-        // Create new notebook via API
-        const createResponse = await fetch(API_ENDPOINTS.NOTEBOOKS, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
+        // Create new notebook if it doesn't exist
+        const { data: newNotebook, error } = await supabase
+          .from('notebooks')
+          .insert([{
             user_id: user.id,
             name: notebookName,
             description: `Notebook: ${notebookName}`,
             color: '#4285f4'
-          })
-        });
-        const createData = await createResponse.json();
+          }])
+          .select('id, name')
+          .single();
 
-        if (createData.error) {
-          console.error('Error creating notebook:', createData.error);
+        if (error) {
+          console.error('Error creating notebook:', error);
           return null;
         }
 
-        return createData.notebook;
+        return newNotebook;
       } catch (error) {
         console.error('Error getting/creating notebook:', error);
         return null;
       }
     };
 
-    // Load available notebooks (via backend API)
+    // Load available notebooks
     const loadAvailableNotebooks = async () => {
       try {
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user?.id) return;
 
-        const response = await fetch(`${API_ENDPOINTS.NOTEBOOKS}?user_id=${user.id}`, {
-          credentials: 'include'
-        });
-        const data = await response.json();
+        const { data: notebooks } = await supabase
+          .from('notebooks')
+          .select('id, name, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
-        setAvailableNotebooks(data.notebooks || []);
+        setAvailableNotebooks(notebooks || []);
       } catch (error) {
         console.error('Error loading notebooks:', error);
       }
@@ -570,7 +575,6 @@ const chatHistory = [
     // Initialize default notebook on mount
     useEffect(() => {
       const initializeDefaultNotebook = async () => {
-        if (!user?.id) return;
         const notebook = await getOrCreateNotebook('Default Notebook');
         if (notebook) {
           setCurrentNotebookId(notebook.id);
@@ -580,7 +584,7 @@ const chatHistory = [
         await loadAvailableNotebooks();
       };
       initializeDefaultNotebook();
-    }, [user]);
+    }, []);
 
     // Handle new chat creation (from sidebar)
     const handleNewChat = () => {

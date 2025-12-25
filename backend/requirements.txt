@@ -64,9 +64,3 @@ youtube-transcript-api
 
 # Production WSGI server
 gunicorn
-
-# Replit Auth dependencies
-flask-dance
-flask-login
-PyJWT
-Flask-SQLAlchemy
