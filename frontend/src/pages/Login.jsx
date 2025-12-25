@@ -43,70 +43,63 @@ function Login() {
   }
   
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="w-full max-w-md mx-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 md:p-12">
-          {/* Logo */}
-          <div className="flex items-center gap-3 mb-8">
-            <img 
-              src="/medbotlogonew.jpg" 
-              alt="Momentum AI Logo" 
-              className="w-10 h-10 rounded-xl object-cover"
-            />
-            <span className="font-semibold text-2xl text-gray-900">Momentum AI</span>
+    <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="w-full max-w-md px-6 md:px-8 py-12 md:py-16">
+        <button
+          onClick={() => navigate('/')}
+          className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3 text-center">Sign in</h1>
+        <p className="text-lg text-gray-600 text-center mb-8">Welcome back! Please sign in to continue.</p>
+        
+        {message && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600 text-center">{message}</p>
           </div>
+        )}
+        
+        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+          <input
+            id="email"
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full px-5 py-3.5 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all bg-white placeholder-gray-500"
+          />
           
-          <h1 className="text-3xl font-semibold text-gray-900 mb-2 text-center">Welcome Back</h1>
-          <p className="text-gray-600 text-center mb-8">Sign in to your account to continue</p>
+          <input
+            id="password"
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="w-full px-5 py-3.5 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all bg-white placeholder-gray-500"
+          />
           
-          {message && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600 text-center">{message}</p>
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all bg-white"
-              />
-            </div>
-            
-            <div>
-              <input
-                id="password"
-                type="password"
-                placeholder="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-all bg-white"
-              />
-            </div>
-            
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-black text-white hover:bg-gray-800 font-medium py-3.5 px-6 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-gray-900 hover:text-gray-700 font-medium transition-colors">
-                Create Account
-              </Link>
-            </p>
-          </div>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-black text-white hover:bg-gray-800 font-medium py-3.5 px-6 rounded-full transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-base"
+          >
+            {isLoading ? 'Signing in...' : 'Continue'}
+          </button>
+        </form>
+        
+        <div className="text-center">
+          <p className="text-sm text-gray-600">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-gray-900 hover:text-gray-700 font-semibold transition-colors">
+              Create one
+            </Link>
+          </p>
         </div>
       </div>
     </div>
