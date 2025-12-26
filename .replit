@@ -1,9 +1,10 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web", "postgresql-16", "python-3.11"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-24_05"
+packages = ["cargo", "freetype", "glibcLocales", "gumbo", "harfbuzz", "jbig2dec", "lcms2", "libiconv", "libimagequant", "libjpeg", "libjpeg_turbo", "libtiff", "libwebp", "libxcrypt", "mupdf", "openjpeg", "python311Packages.flask", "python311Packages.flask-cors", "python311Packages.flask-login", "python311Packages.flask-sqlalchemy", "python311Packages.gunicorn", "python311Packages.openai", "python311Packages.pillow", "python311Packages.psycopg2", "python311Packages.pydantic", "python311Packages.pyjwt", "python311Packages.pymupdf", "python311Packages.pypdf2", "python311Packages.python-docx", "python311Packages.reportlab", "python311Packages.requests", "python311Packages.tiktoken", "rustc", "swig", "tcl", "tk", "xcbuild", "zlib", "libstdcxx5", "gcc"]
 
 [[ports]]
 localPort = 5000
@@ -33,7 +34,13 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
+args = "export LD_LIBRARY_PATH=/nix/store/xvzz97yk73hw03v5dhhz3j47ggwf1yq1-gcc-13.2.0-lib/lib:$LD_LIBRARY_PATH && cd backend && python3 app.py"
 waitForPort = 5000
+
+[agent]
+expertMode = true
