@@ -52,6 +52,9 @@ The LD_LIBRARY_PATH is required for the grpc library used by google-generativeai
   - Documents are now filtered by notebook ownership, not document metadata
   - First gets all notebooks owned by user, then returns documents from those notebooks
   - Supports both new notebooks (with owner in description) and legacy direct ownership
+- **Data Migration** (December 26, 2025):
+  - Added owner metadata to all existing notebooks so they appear in user's notebook list
+  - User can now switch notebooks via "New Chat" button in sidebar
 
 ## Environment Variables Required
 - `GEMINI_API_KEY`: Google Gemini API key for AI features
