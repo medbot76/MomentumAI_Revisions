@@ -1452,27 +1452,9 @@ def sync_user_to_database(user_id, email=None, first_name=None, last_name=None, 
             db.session.commit()
             print(f"User synced to local database: {user_id}")
         
-        # 2. Sync to Supabase users table (for FK constraints on notebooks/documents)
-        try:
-            # Check if user exists in Supabase
-            check = supabase.table('users').select('id').eq('id', user_id).execute()
-            if not check.data or len(check.data) == 0:
-                # Create user in Supabase
-                user_data = {
-                    'id': user_id,
-                    'email': email,
-                    'first_name': first_name,
-                    'last_name': last_name,
-                    'profile_image_url': profile_image_url,
-                    'is_email_verified': True
-                }
-                supabase.table('users').insert(user_data).execute()
-                print(f"User synced to Supabase: {user_id}")
-        except Exception as supabase_error:
-            # If duplicate or constraint error, user already exists which is fine
-            error_str = str(supabase_error).lower()
-            if 'duplicate' not in error_str and '23505' not in str(supabase_error):
-                print(f"Supabase user sync warning: {supabase_error}")
+        # Note: Supabase user sync disabled - using service user workaround instead
+        # All notebooks/documents use SUPABASE_SERVICE_USER_ID for FK constraints
+        # Real owner is tracked via description metadata
         
         return True
     except Exception as e:

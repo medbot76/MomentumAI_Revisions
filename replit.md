@@ -55,6 +55,11 @@ The LD_LIBRARY_PATH is required for the grpc library used by google-generativeai
 - **Data Migration** (December 26, 2025):
   - Added owner metadata to all existing notebooks so they appear in user's notebook list
   - User can now switch notebooks via "New Chat" button in sidebar
+  - Deleted empty duplicate notebooks to prevent confusion
+- **Fixed Login Loading Issue** (December 26, 2025):
+  - Removed code that tried to sync users to non-existent Supabase `users` table (PGRST205 error)
+  - Local SQLAlchemy database is used for user auth session management only
+  - All Supabase records use service user for FK constraints
 
 ## Environment Variables Required
 - `GEMINI_API_KEY`: Google Gemini API key for AI features
