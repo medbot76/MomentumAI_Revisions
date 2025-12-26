@@ -501,7 +501,7 @@ async def upload_document():
 
 @app.route('/api/documents', methods=['GET'])
 def list_documents():
-    """List documents from Supabase using service user workaround"""
+    """List documents from Supabase - uses notebook ownership for filtering"""
     try:
         user_data = get_current_user_api()
         user_id = user_data.get('id') if user_data else request.args.get('user_id')
@@ -512,31 +512,55 @@ def list_documents():
         
         result = []
         
-        # Query documents under service user
-        query = supabase.table('documents').select('*').eq('user_id', SUPABASE_SERVICE_USER_ID)
-        if notebook_id:
-            query = query.eq('notebook_id', notebook_id)
-        response = query.order('created_at', desc=True).execute()
+        # First, get all notebooks owned by this user (to know which documents to show)
+        user_notebook_ids = set()
         
-        if response.data:
-            for doc in response.data:
-                metadata = doc.get('metadata') or ''
-                real_owner = extract_real_owner(metadata)
+        # Get notebooks under service user with owner in description
+        nb_response = supabase.table('notebooks').select('id, description').eq('user_id', SUPABASE_SERVICE_USER_ID).execute()
+        if nb_response.data:
+            for nb in nb_response.data:
+                desc = nb.get('description', '')
+                real_owner = extract_real_owner(desc)
                 if real_owner == user_id:
-                    result.append({
-                        'id': doc.get('id'),
-                        'user_id': user_id,
-                        'notebook_id': doc.get('notebook_id'),
-                        'filename': doc.get('original_filename') or doc.get('filename'),
-                        'original_filename': doc.get('original_filename'),
-                        'storage_path': doc.get('storage_path'),
-                        'content_type': doc.get('content_type'),
-                        'file_size': doc.get('file_size'),
-                        'status': doc.get('status', 'completed'),
-                        'error_message': doc.get('error_message'),
-                        'created_at': doc.get('created_at'),
-                        'updated_at': doc.get('updated_at')
-                    })
+                    user_notebook_ids.add(nb.get('id'))
+        
+        # Also get notebooks directly owned by user (legacy)
+        try:
+            legacy_nb = supabase.table('notebooks').select('id').eq('user_id', user_id).execute()
+            if legacy_nb.data:
+                for nb in legacy_nb.data:
+                    user_notebook_ids.add(nb.get('id'))
+        except:
+            pass
+        
+        # If notebook_id filter specified, verify user owns it
+        if notebook_id:
+            if notebook_id not in user_notebook_ids:
+                return jsonify([])  # User doesn't own this notebook
+            target_notebooks = {notebook_id}
+        else:
+            target_notebooks = user_notebook_ids
+        
+        # Get documents for all target notebooks under service user
+        if target_notebooks:
+            for nb_id in target_notebooks:
+                doc_response = supabase.table('documents').select('*').eq('user_id', SUPABASE_SERVICE_USER_ID).eq('notebook_id', nb_id).order('created_at', desc=True).execute()
+                if doc_response.data:
+                    for doc in doc_response.data:
+                        result.append({
+                            'id': doc.get('id'),
+                            'user_id': user_id,
+                            'notebook_id': doc.get('notebook_id'),
+                            'filename': doc.get('original_filename') or doc.get('filename'),
+                            'original_filename': doc.get('original_filename'),
+                            'storage_path': doc.get('storage_path'),
+                            'content_type': doc.get('content_type'),
+                            'file_size': doc.get('file_size'),
+                            'status': doc.get('status', 'completed'),
+                            'error_message': doc.get('error_message'),
+                            'created_at': doc.get('created_at'),
+                            'updated_at': doc.get('updated_at')
+                        })
         
         # Also check for legacy documents under user's direct ownership
         try:
@@ -546,8 +570,9 @@ def list_documents():
             legacy_response = legacy_query.order('created_at', desc=True).execute()
             
             if legacy_response.data:
+                existing_ids = {r['id'] for r in result}
                 for doc in legacy_response.data:
-                    if not any(r['id'] == doc.get('id') for r in result):
+                    if doc.get('id') not in existing_ids:
                         result.append({
                             'id': doc.get('id'),
                             'user_id': doc.get('user_id'),
