@@ -454,18 +454,20 @@ async def upload_document():
 @app.route('/api/documents', methods=['GET'])
 def list_documents():
     try:
-        user_id = request.args.get('user_id')
+        # Get user from session or query param for backwards compatibility
+        user_data = get_current_user_api()
+        user_id = user_data.get('id') if user_data else request.args.get('user_id')
         notebook_id = request.args.get('notebook_id')
         
         if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
+            return jsonify({'error': 'Authentication required'}), 401
         
         query = Document.query.filter_by(user_id=user_id)
         if notebook_id:
             query = query.filter_by(notebook_id=notebook_id)
         
         documents = query.order_by(Document.created_at.desc()).all()
-        return jsonify({'documents': [d.to_dict() for d in documents]})
+        return jsonify([d.to_dict() for d in documents])
     except Exception as e:
         print(f"Documents Error: {e}")
         return jsonify({'error': str(e)}), 500
