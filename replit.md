@@ -45,9 +45,13 @@ The LD_LIBRARY_PATH is required for the grpc library used by google-generativeai
   - Real owner ID stored in description field as JSON prefix: `{"real_owner":"uuid"}|description`
   - Helper functions: `get_owner_metadata()`, `extract_real_owner()`, `extract_description()`
   - Constant: `SUPABASE_SERVICE_USER_ID = 'c04c5c6a-367b-4322-8913-856d13a2da75'`
-  - All `/api/notebooks` endpoints use Supabase with service user + metadata filtering
-  - All `/api/documents` endpoints use Supabase with service user + metadata filtering
+  - All `/api/notebooks` endpoints use Supabase with service user + description metadata filtering
+  - All `/api/documents` endpoints use Supabase with **notebook ownership** for filtering (determines owner from notebook, not document metadata)
   - User auth still syncs to local SQLAlchemy database for session management
+- **Document Filtering Fix**:
+  - Documents are now filtered by notebook ownership, not document metadata
+  - First gets all notebooks owned by user, then returns documents from those notebooks
+  - Supports both new notebooks (with owner in description) and legacy direct ownership
 
 ## Environment Variables Required
 - `GEMINI_API_KEY`: Google Gemini API key for AI features

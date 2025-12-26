@@ -151,6 +151,23 @@ def upload_to_supabase_storage(file_path: str, user_id: str, filename: str) -> s
 # Supabase service user for FK constraints workaround
 SUPABASE_SERVICE_USER_ID = 'c04c5c6a-367b-4322-8913-856d13a2da75'
 
+def supabase_query_with_retry(query_func, max_retries=3):
+    """Execute a Supabase query with retry logic for HTTP/2 protocol errors"""
+    import time
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return query_func()
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            if 'pseudo-header' in error_str or 'protocol' in error_str or 'connection' in error_str:
+                if attempt < max_retries - 1:
+                    time.sleep(0.1 * (attempt + 1))
+                    continue
+            raise e
+    raise last_error
+
 def get_owner_metadata(real_user_id):
     """Create metadata JSON with real owner"""
     return f'{{"real_owner":"{real_user_id}"}}'
@@ -1151,8 +1168,10 @@ def list_notebooks():
         if not user_id:
             return jsonify({'error': 'Authentication required'}), 401
         
-        # Query Supabase - get all notebooks under service user
-        response = supabase.table('notebooks').select('*').eq('user_id', SUPABASE_SERVICE_USER_ID).order('created_at', desc=True).execute()
+        # Query Supabase with retry - get all notebooks under service user
+        response = supabase_query_with_retry(
+            lambda: supabase.table('notebooks').select('*').eq('user_id', SUPABASE_SERVICE_USER_ID).order('created_at', desc=True).execute()
+        )
         notebooks = response.data if response.data else []
         
         # Filter by real owner stored in description field
@@ -1174,7 +1193,9 @@ def list_notebooks():
         
         # Also check for legacy notebooks under the user's own ID
         try:
-            legacy_response = supabase.table('notebooks').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+            legacy_response = supabase_query_with_retry(
+                lambda: supabase.table('notebooks').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+            )
             if legacy_response.data:
                 for nb in legacy_response.data:
                     if not any(r['id'] == nb.get('id') for r in result):
