@@ -1116,7 +1116,7 @@ function Chatbot({
     }
   };
 
-  // Fetch user's files from Supabase
+  // Fetch user's files from backend API
   const fetchUserFiles = async () => {
     try {
       setLoadingFiles(true);
@@ -1141,19 +1141,19 @@ function Chatbot({
         return;
       }
 
-      // Fetch documents for this user and notebook
-      const { data: documents, error } = await supabase
-        .from('documents')
-        .select('id, filename, original_filename, file_type, file_size, created_at, processing_status')
-        .eq('user_id', user.id)
-        .eq('notebook_id', notebookId)
-        .order('created_at', { ascending: false });
+      // Fetch documents from backend API
+      const response = await fetch(`/api/documents?notebook_id=${notebookId}`, {
+        method: 'GET',
+        credentials: 'include'
+      });
 
-      if (error) {
-        console.error('Error fetching documents:', error);
+      if (!response.ok) {
+        console.error('Error fetching documents:', await response.text());
         setSupabaseFiles([]);
         return;
       }
+
+      const documents = await response.json();
 
       // Transform documents to match the expected format
       const transformedFiles = documents.map(doc => ({
@@ -1167,7 +1167,7 @@ function Chatbot({
         uploadedAt: doc.created_at
       }));
 
-      console.log('Fetched files from Supabase:', transformedFiles);
+      console.log('Fetched files from backend:', transformedFiles);
       setSupabaseFiles(transformedFiles);
     } catch (error) {
       console.error('Error fetching user files:', error);
@@ -1188,17 +1188,19 @@ function Chatbot({
       if (propCurrentNotebookId) {
         // Use notebook from parent
         setCurrentNotebookId(propCurrentNotebookId);
-        // Fetch notebook name
+        // Fetch notebook name from backend
         try {
           if (user?.id) {
-            const { data: notebook } = await supabase
-              .from('notebooks')
-              .select('name')
-              .eq('id', propCurrentNotebookId)
-              .eq('user_id', user.id)
-              .single();
-            if (notebook) {
-              setCurrentNotebookName(notebook.name);
+            const response = await fetch('/api/notebooks', {
+              method: 'GET',
+              credentials: 'include'
+            });
+            if (response.ok) {
+              const notebooks = await response.json();
+              const notebook = notebooks.find(nb => nb.id === propCurrentNotebookId);
+              if (notebook) {
+                setCurrentNotebookName(notebook.name);
+              }
             }
           }
         } catch (error) {
@@ -1240,30 +1242,32 @@ function Chatbot({
       const fetchNotebookData = async () => {
         try {
           if (user?.id) {
-            // Fetch notebook name
-            const { data: notebook } = await supabase
-              .from('notebooks')
-              .select('name')
-              .eq('id', propCurrentNotebookId)
-              .eq('user_id', user.id)
-              .single();
-            if (notebook) {
-              setCurrentNotebookName(notebook.name);
+            // Fetch notebook name from backend
+            const notebooksResponse = await fetch('/api/notebooks', {
+              method: 'GET',
+              credentials: 'include'
+            });
+            if (notebooksResponse.ok) {
+              const notebooks = await notebooksResponse.json();
+              const notebook = notebooks.find(nb => nb.id === propCurrentNotebookId);
+              if (notebook) {
+                setCurrentNotebookName(notebook.name);
+              }
             }
             
-            // Fetch files for the new notebook using propCurrentNotebookId directly
-            const { data: documents, error } = await supabase
-              .from('documents')
-              .select('id, filename, original_filename, file_type, file_size, created_at, processing_status')
-              .eq('user_id', user.id)
-              .eq('notebook_id', propCurrentNotebookId)
-              .order('created_at', { ascending: false });
+            // Fetch files for the new notebook from backend API
+            const response = await fetch(`/api/documents?notebook_id=${propCurrentNotebookId}`, {
+              method: 'GET',
+              credentials: 'include'
+            });
 
-            if (error) {
-              console.error('Error fetching documents:', error);
+            if (!response.ok) {
+              console.error('Error fetching documents:', await response.text());
               setSupabaseFiles([]);
               return;
             }
+
+            const documents = await response.json();
 
             // Transform documents to match the expected format
             const transformedFiles = documents.map(doc => ({
