@@ -39,12 +39,15 @@ The LD_LIBRARY_PATH is required for the grpc library used by google-generativeai
 - Installed all required Python packages to `.pythonlibs/`
 - Configured LD_LIBRARY_PATH for native library dependencies
 - Application now running successfully with all core features
-- **Fixed database architecture mismatch**:
-  - Root cause: Supabase tables had foreign keys to `auth.users` but app uses custom Flask auth
-  - Solution: Changed frontend to use backend APIs for notebook/user operations instead of calling Supabase directly
-  - Backend now syncs users to local SQLAlchemy database (not Supabase) for FK relationships
-  - Updated `/api/notebooks` endpoints to get user from session instead of requiring user_id param
-  - Notebooks and documents are now created in local database, file storage still uses Supabase Storage
+- **Fixed database architecture - Service User Workaround**:
+  - Root cause: Supabase tables have FK constraints to `auth.users` but app uses custom Flask auth
+  - Solution: "Service user" approach - all records created under existing Supabase user `c04c5c6a-367b-4322-8913-856d13a2da75`
+  - Real owner ID stored in description field as JSON prefix: `{"real_owner":"uuid"}|description`
+  - Helper functions: `get_owner_metadata()`, `extract_real_owner()`, `extract_description()`
+  - Constant: `SUPABASE_SERVICE_USER_ID = 'c04c5c6a-367b-4322-8913-856d13a2da75'`
+  - All `/api/notebooks` endpoints use Supabase with service user + metadata filtering
+  - All `/api/documents` endpoints use Supabase with service user + metadata filtering
+  - User auth still syncs to local SQLAlchemy database for session management
 
 ## Environment Variables Required
 - `GEMINI_API_KEY`: Google Gemini API key for AI features

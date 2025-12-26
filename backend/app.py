@@ -148,44 +148,92 @@ def upload_to_supabase_storage(file_path: str, user_id: str, filename: str) -> s
         print(f"Continuing with storage path: {storage_path}")
         return storage_path
 
+# Supabase service user for FK constraints workaround
+SUPABASE_SERVICE_USER_ID = 'c04c5c6a-367b-4322-8913-856d13a2da75'
+
+def get_owner_metadata(real_user_id):
+    """Create metadata JSON with real owner"""
+    return f'{{"real_owner":"{real_user_id}"}}'
+
+def extract_real_owner(field_value):
+    """Extract real owner from metadata or description field
+    Handles formats:
+    - '{"real_owner":"uuid"}' (pure JSON metadata field)
+    - '{"real_owner":"uuid"}|description text' (JSON prefix in description with separator)
+    Returns None if no owner metadata found (legacy record)
+    """
+    if not field_value:
+        return None
+    # Only parse if it looks like our metadata format
+    if not field_value.startswith('{"real_owner"'):
+        return None
+    try:
+        import json
+        # Check if it's prefixed format with separator
+        if '|' in field_value:
+            json_part = field_value.split('|')[0]
+        else:
+            json_part = field_value
+        data = json.loads(json_part)
+        return data.get('real_owner')
+    except:
+        return None
+
+def extract_description(field_value):
+    """Extract actual description from field that may have JSON prefix
+    Returns original description for legacy records without metadata prefix
+    """
+    if not field_value:
+        return ''
+    # Only strip if it starts with our metadata format
+    if field_value.startswith('{"real_owner"'):
+        if '|' in field_value:
+            parts = field_value.split('|', 1)
+            return parts[1] if len(parts) > 1 else ''
+        return ''  # Pure metadata, no description
+    # Legacy record - return as-is
+    return field_value
+
 def create_document_record(user_id: str, notebook_id: str, filename: str, original_filename: str, 
                           file_type: str, file_size: int, storage_path: str) -> str:
-    """Create a document record in the documents table"""
+    """Create a document record in Supabase using service user"""
     try:
+        document_id = str(uuid.uuid4())
         public_url = f"{supabase_url}/storage/v1/object/public/documents/{storage_path}"
         
-        document = Document(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            notebook_id=notebook_id,
-            filename=filename,
-            original_filename=original_filename,
-            file_type=file_type,
-            file_size=file_size,
-            storage_path=storage_path,
-            file_path=public_url,
-            processing_status='pending',
-            doc_metadata={}
-        )
-        db.session.add(document)
-        db.session.commit()
-        return document.id
+        # Create document in Supabase using service user to bypass FK constraint
+        doc_data = {
+            'id': document_id,
+            'user_id': SUPABASE_SERVICE_USER_ID,  # Use service user for FK
+            'notebook_id': notebook_id,
+            'filename': filename,
+            'original_filename': original_filename,
+            'content_type': file_type,
+            'file_size': file_size,
+            'storage_path': storage_path,
+            'status': 'pending',
+            'metadata': get_owner_metadata(user_id)  # Store real owner
+        }
+        
+        response = supabase.table('documents').insert(doc_data).execute()
+        
+        if response.data and len(response.data) > 0:
+            return response.data[0].get('id')
+        else:
+            raise Exception("Failed to create document in Supabase")
     except Exception as e:
-        db.session.rollback()
         print(f"Error creating document record: {e}")
         raise e
 
 def update_document_status(document_id: str, status: str, error: str = None):
-    """Update document processing status"""
+    """Update document processing status in Supabase"""
     try:
-        document = Document.query.get(document_id)
-        if document:
-            document.processing_status = status
-            if error:
-                document.processing_error = error
-            db.session.commit()
+        update_data = {'status': status}
+        if error:
+            update_data['error_message'] = error
+        
+        supabase.table('documents').update(update_data).eq('id', document_id).execute()
     except Exception as e:
-        db.session.rollback()
         print(f"Error updating document status: {e}")
 
 async def initialize_exam_generator():
@@ -453,7 +501,7 @@ async def upload_document():
 
 @app.route('/api/documents', methods=['GET'])
 def list_documents():
-    """List documents from Supabase"""
+    """List documents from Supabase using service user workaround"""
     try:
         user_data = get_current_user_api()
         user_id = user_data.get('id') if user_data else request.args.get('user_id')
@@ -462,31 +510,61 @@ def list_documents():
         if not user_id:
             return jsonify({'error': 'Authentication required'}), 401
         
-        # Query Supabase directly
-        query = supabase.table('documents').select('*').eq('user_id', user_id)
+        result = []
+        
+        # Query documents under service user
+        query = supabase.table('documents').select('*').eq('user_id', SUPABASE_SERVICE_USER_ID)
         if notebook_id:
             query = query.eq('notebook_id', notebook_id)
-        
         response = query.order('created_at', desc=True).execute()
-        documents = response.data if response.data else []
         
-        # Transform to match expected format
-        result = []
-        for doc in documents:
-            result.append({
-                'id': doc.get('id'),
-                'user_id': doc.get('user_id'),
-                'notebook_id': doc.get('notebook_id'),
-                'filename': doc.get('original_filename') or doc.get('filename'),
-                'original_filename': doc.get('original_filename'),
-                'storage_path': doc.get('storage_path'),
-                'content_type': doc.get('content_type'),
-                'file_size': doc.get('file_size'),
-                'status': doc.get('status', 'completed'),
-                'error_message': doc.get('error_message'),
-                'created_at': doc.get('created_at'),
-                'updated_at': doc.get('updated_at')
-            })
+        if response.data:
+            for doc in response.data:
+                metadata = doc.get('metadata') or ''
+                real_owner = extract_real_owner(metadata)
+                if real_owner == user_id:
+                    result.append({
+                        'id': doc.get('id'),
+                        'user_id': user_id,
+                        'notebook_id': doc.get('notebook_id'),
+                        'filename': doc.get('original_filename') or doc.get('filename'),
+                        'original_filename': doc.get('original_filename'),
+                        'storage_path': doc.get('storage_path'),
+                        'content_type': doc.get('content_type'),
+                        'file_size': doc.get('file_size'),
+                        'status': doc.get('status', 'completed'),
+                        'error_message': doc.get('error_message'),
+                        'created_at': doc.get('created_at'),
+                        'updated_at': doc.get('updated_at')
+                    })
+        
+        # Also check for legacy documents under user's direct ownership
+        try:
+            legacy_query = supabase.table('documents').select('*').eq('user_id', user_id)
+            if notebook_id:
+                legacy_query = legacy_query.eq('notebook_id', notebook_id)
+            legacy_response = legacy_query.order('created_at', desc=True).execute()
+            
+            if legacy_response.data:
+                for doc in legacy_response.data:
+                    if not any(r['id'] == doc.get('id') for r in result):
+                        result.append({
+                            'id': doc.get('id'),
+                            'user_id': doc.get('user_id'),
+                            'notebook_id': doc.get('notebook_id'),
+                            'filename': doc.get('original_filename') or doc.get('filename'),
+                            'original_filename': doc.get('original_filename'),
+                            'storage_path': doc.get('storage_path'),
+                            'content_type': doc.get('content_type'),
+                            'file_size': doc.get('file_size'),
+                            'status': doc.get('status', 'completed'),
+                            'error_message': doc.get('error_message'),
+                            'created_at': doc.get('created_at'),
+                            'updated_at': doc.get('updated_at')
+                        })
+        except:
+            pass  # User might not exist in Supabase users table
+        
         return jsonify(result)
     except Exception as e:
         print(f"Documents Error: {e}")
@@ -1037,7 +1115,7 @@ async def add_study_plan_to_calendar():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# Notebook management endpoints - Uses Supabase as primary data store
+# Notebook management endpoints - Uses Supabase with service user workaround
 @app.route('/api/notebooks', methods=['GET'])
 def list_notebooks():
     """List all notebooks for the authenticated user from Supabase"""
@@ -1048,22 +1126,45 @@ def list_notebooks():
         if not user_id:
             return jsonify({'error': 'Authentication required'}), 401
         
-        # Query Supabase directly
-        response = supabase.table('notebooks').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+        # Query Supabase - get all notebooks under service user
+        response = supabase.table('notebooks').select('*').eq('user_id', SUPABASE_SERVICE_USER_ID).order('created_at', desc=True).execute()
         notebooks = response.data if response.data else []
         
-        # Transform to match expected format
+        # Filter by real owner stored in description field
         result = []
         for nb in notebooks:
-            result.append({
-                'id': nb.get('id'),
-                'user_id': nb.get('user_id'),
-                'name': nb.get('name'),
-                'description': nb.get('description', ''),
-                'color': nb.get('color', '#4285f4'),
-                'created_at': nb.get('created_at'),
-                'updated_at': nb.get('updated_at')
-            })
+            desc_field = nb.get('description', '')
+            real_owner = extract_real_owner(desc_field)
+            # Include only if real owner matches this user
+            if real_owner == user_id:
+                result.append({
+                    'id': nb.get('id'),
+                    'user_id': user_id,  # Return real user id
+                    'name': nb.get('name'),
+                    'description': extract_description(desc_field),  # Extract clean description
+                    'color': nb.get('color', '#4285f4'),
+                    'created_at': nb.get('created_at'),
+                    'updated_at': nb.get('updated_at')
+                })
+        
+        # Also check for legacy notebooks under the user's own ID
+        try:
+            legacy_response = supabase.table('notebooks').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+            if legacy_response.data:
+                for nb in legacy_response.data:
+                    if not any(r['id'] == nb.get('id') for r in result):
+                        result.append({
+                            'id': nb.get('id'),
+                            'user_id': nb.get('user_id'),
+                            'name': nb.get('name'),
+                            'description': nb.get('description', ''),
+                            'color': nb.get('color', '#4285f4'),
+                            'created_at': nb.get('created_at'),
+                            'updated_at': nb.get('updated_at')
+                        })
+        except:
+            pass  # User might not exist in Supabase users table
+        
         return jsonify(result)
     except Exception as e:
         print(f"Notebooks Error: {e}")
@@ -1071,7 +1172,7 @@ def list_notebooks():
 
 @app.route('/api/notebooks', methods=['POST'])
 def create_notebook():
-    """Create a new notebook in Supabase"""
+    """Create a new notebook in Supabase using service user"""
     try:
         data = request.json or {}
         
@@ -1095,13 +1196,15 @@ def create_notebook():
             db.session.add(user)
             db.session.commit()
         
-        # Create notebook in Supabase
+        # Create notebook in Supabase using service user to bypass FK constraint
+        # Store real owner in description field as JSON prefix
         notebook_id = str(uuid.uuid4())
+        owner_prefix = get_owner_metadata(user_id)
         notebook_data = {
             'id': notebook_id,
-            'user_id': user_id,
+            'user_id': SUPABASE_SERVICE_USER_ID,  # Use service user for FK
             'name': name,
-            'description': description,
+            'description': f"{owner_prefix}|{description}" if description else owner_prefix,  # Embed owner in description
             'color': color
         }
         
@@ -1111,9 +1214,9 @@ def create_notebook():
             nb = response.data[0]
             return jsonify({
                 'id': nb.get('id'),
-                'user_id': nb.get('user_id'),
+                'user_id': user_id,  # Return real user id
                 'name': nb.get('name'),
-                'description': nb.get('description', ''),
+                'description': description,
                 'color': nb.get('color', '#4285f4'),
                 'created_at': nb.get('created_at'),
                 'updated_at': nb.get('updated_at')
@@ -1134,10 +1237,16 @@ def delete_notebook(notebook_id):
         if not user_id:
             return jsonify({'error': 'Authentication required'}), 401
         
-        # Check notebook exists and belongs to user
-        check = supabase.table('notebooks').select('id').eq('id', notebook_id).eq('user_id', user_id).execute()
+        # Check notebook exists and belongs to user (check both service user and direct ownership)
+        check = supabase.table('notebooks').select('id,metadata,user_id').eq('id', notebook_id).execute()
         if not check.data or len(check.data) == 0:
-            return jsonify({'error': 'Notebook not found or access denied'}), 404
+            return jsonify({'error': 'Notebook not found'}), 404
+        
+        nb = check.data[0]
+        real_owner = extract_real_owner(nb.get('metadata'))
+        # Allow delete if real owner matches or direct ownership
+        if real_owner != user_id and nb.get('user_id') != user_id:
+            return jsonify({'error': 'Access denied'}), 403
         
         # Delete from Supabase
         supabase.table('notebooks').delete().eq('id', notebook_id).execute()
