@@ -1394,7 +1394,7 @@ function Chatbot({
         size: doc.file_size || 0,
         type: doc.file_type || 'unknown',
         supabaseDocument: true,
-        status: doc.processing_status,
+        status: doc.status || 'completed',
         uploadedAt: doc.created_at
       }));
 
