@@ -1158,6 +1158,81 @@ async def reprocess_document():
 def health_check():
     return jsonify({'status': 'healthy', 'message': 'Backend is running'})
 
+# Migration endpoint to sync documents from Supabase to local database
+@app.route('/api/migrate-documents', methods=['POST'])
+def migrate_documents():
+    """Migrate documents from Supabase to local database"""
+    try:
+        user_data = get_current_user_api()
+        if not user_data:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        user_id = user_data.get('id')
+        
+        # Fetch documents from Supabase
+        result = supabase.table('documents').select('*').eq('user_id', user_id).execute()
+        
+        if not result.data:
+            return jsonify({'message': 'No documents to migrate', 'migrated': 0})
+        
+        migrated_count = 0
+        skipped_count = 0
+        
+        for doc in result.data:
+            # Check if document already exists in local database
+            existing = Document.query.get(doc['id'])
+            if existing:
+                skipped_count += 1
+                continue
+            
+            # Ensure notebook exists in local database
+            notebook_id = doc.get('notebook_id')
+            if notebook_id:
+                notebook = Notebook.query.get(notebook_id)
+                if not notebook:
+                    # Create notebook in local database
+                    notebook = Notebook(
+                        id=notebook_id,
+                        user_id=user_id,
+                        name='Migrated Notebook',
+                        description='Notebook migrated from Supabase',
+                        color='#4285f4'
+                    )
+                    db.session.add(notebook)
+                    db.session.flush()
+            
+            # Create document in local database
+            new_doc = Document(
+                id=doc['id'],
+                user_id=user_id,
+                notebook_id=notebook_id,
+                filename=doc.get('filename', ''),
+                original_filename=doc.get('original_filename', doc.get('filename', '')),
+                file_type=doc.get('file_type', 'application/octet-stream'),
+                file_size=doc.get('file_size', 0),
+                storage_path=doc.get('storage_path', ''),
+                file_path=doc.get('file_path', ''),
+                processing_status=doc.get('processing_status', 'completed'),
+                processing_error=doc.get('processing_error'),
+                doc_metadata=doc.get('metadata', {})
+            )
+            db.session.add(new_doc)
+            migrated_count += 1
+        
+        db.session.commit()
+        return jsonify({
+            'message': f'Migration complete',
+            'migrated': migrated_count,
+            'skipped': skipped_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Migration error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 def sync_user_to_database(user_id, email=None, first_name=None, last_name=None, profile_image_url=None):
     """Sync user to local database (for foreign key relationships with notebooks/documents)"""
     try:

@@ -523,6 +523,21 @@ const chatHistory = [
         });
         
         if (response.ok) {
+          // Also migrate any existing documents from Supabase to local database
+          try {
+            const migrateResponse = await fetch('/api/migrate-documents', {
+              method: 'POST',
+              credentials: 'include'
+            });
+            if (migrateResponse.ok) {
+              const result = await migrateResponse.json();
+              if (result.migrated > 0) {
+                console.log(`Migrated ${result.migrated} documents from Supabase`);
+              }
+            }
+          } catch (migrateError) {
+            console.log('Migration check completed');
+          }
           return true;
         }
         
