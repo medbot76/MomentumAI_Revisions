@@ -1035,44 +1035,34 @@ function Chatbot({
     if (!user?.id) return false;
     
     try {
-      // Check if user exists
-      const { data: existingUser, error: checkError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', user.id)
-        .single();
+      // Call backend API to sync user - the backend handles database operations
+      const response = await fetch('/api/auth/sync-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
       
-      if (existingUser) {
-        return true; // User already exists
+      if (response.ok) {
+        return true;
       }
       
-      // Create user if they don't exist
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert([{
-          id: user.id,
-          email: user.email || null,
-          first_name: user.first_name || user.name?.split(' ')[0] || null,
-          last_name: user.last_name || user.name?.split(' ').slice(1).join(' ') || null,
-          profile_image_url: user.profile_image_url || user.image || null,
-          is_email_verified: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }]);
-      
-      if (insertError && insertError.code !== '23505') { // Ignore duplicate key error
-        console.error('Error creating user:', insertError);
+      // If sync fails, user might already exist which is fine
+      const data = await response.json();
+      if (response.status === 401) {
+        console.error('User not authenticated');
         return false;
       }
       
+      // For other errors, still return true as user might exist
       return true;
     } catch (error) {
       console.error('Error ensuring user exists:', error);
-      return false;
+      // Return true anyway - the backend will handle user creation on subsequent requests
+      return true;
     }
   };
 
-  // Get or create notebook for the current chat
+  // Get or create notebook for the current chat (using backend API)
   const getOrCreateNotebook = async (notebookName = 'Default Notebook') => {
     try {
       if (!user?.id) {
@@ -1086,36 +1076,40 @@ function Chatbot({
         return null;
       }
 
-      // Try to find existing notebook with this name
-      const { data: notebooks } = await supabase
-        .from('notebooks')
-        .select('id, name')
-        .eq('user_id', user.id)
-        .eq('name', notebookName)
-        .limit(1);
+      // First, load notebooks from backend to see if one exists
+      const listResponse = await fetch('/api/notebooks', {
+        method: 'GET',
+        credentials: 'include'
+      });
       
-      if (notebooks && notebooks.length > 0) {
-        return notebooks[0];
+      if (listResponse.ok) {
+        const notebooks = await listResponse.json();
+        const existing = notebooks.find(nb => nb.name === notebookName);
+        if (existing) {
+          return existing;
+        }
       }
 
-      // Create new notebook if it doesn't exist
-      const { data: newNotebook, error } = await supabase
-        .from('notebooks')
-        .insert([{
-          user_id: user.id,
+      // Create new notebook via backend API
+      const createResponse = await fetch('/api/notebooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
           name: notebookName,
           description: `Notebook: ${notebookName}`,
           color: '#4285f4'
-        }])
-        .select('id, name')
-        .single();
+        })
+      });
 
-      if (error) {
+      if (createResponse.ok) {
+        const newNotebook = await createResponse.json();
+        return newNotebook;
+      } else {
+        const error = await createResponse.json();
         console.error('Error creating notebook:', error);
         return null;
       }
-
-      return newNotebook;
     } catch (error) {
       console.error('Error getting/creating notebook:', error);
       return null;

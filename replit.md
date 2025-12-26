@@ -39,10 +39,12 @@ The LD_LIBRARY_PATH is required for the grpc library used by google-generativeai
 - Installed all required Python packages to `.pythonlibs/`
 - Configured LD_LIBRARY_PATH for native library dependencies
 - Application now running successfully with all core features
-- Fixed "Error loading files" issue by adding user sync to Supabase database
-  - Backend now auto-syncs users to Supabase when they authenticate
-  - This fixes foreign key constraint issues when creating notebooks
-  - Added `ensureUserExists` function in frontend as fallback
+- **Fixed database architecture mismatch**:
+  - Root cause: Supabase tables had foreign keys to `auth.users` but app uses custom Flask auth
+  - Solution: Changed frontend to use backend APIs for notebook/user operations instead of calling Supabase directly
+  - Backend now syncs users to local SQLAlchemy database (not Supabase) for FK relationships
+  - Updated `/api/notebooks` endpoints to get user from session instead of requiring user_id param
+  - Notebooks and documents are now created in local database, file storage still uses Supabase Storage
 
 ## Environment Variables Required
 - `GEMINI_API_KEY`: Google Gemini API key for AI features

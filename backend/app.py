@@ -1018,34 +1018,45 @@ async def add_study_plan_to_calendar():
 # Notebook management endpoints
 @app.route('/api/notebooks', methods=['GET'])
 def list_notebooks():
-    """List all notebooks for a user"""
+    """List all notebooks for the authenticated user"""
     try:
-        user_id = request.args.get('user_id')
+        # Get user from session or query param for backwards compatibility
+        user_data = get_current_user_api()
+        user_id = user_data.get('id') if user_data else request.args.get('user_id')
+        
         if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
+            return jsonify({'error': 'Authentication required'}), 401
         
         notebooks = Notebook.query.filter_by(user_id=user_id).order_by(Notebook.created_at.desc()).all()
-        return jsonify({'notebooks': [n.to_dict() for n in notebooks]})
+        return jsonify([n.to_dict() for n in notebooks])
     except Exception as e:
         print(f"Notebooks Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/notebooks', methods=['POST'])
 def create_notebook():
-    """Create a new notebook"""
+    """Create a new notebook for the authenticated user"""
     try:
-        data = request.json
-        user_id = data.get('user_id')
+        data = request.json or {}
+        
+        # Get user from session or request body for backwards compatibility
+        user_data = get_current_user_api()
+        user_id = user_data.get('id') if user_data else data.get('user_id')
+        
         name = data.get('name')
         description = data.get('description', '')
         color = data.get('color', '#4285f4')
         
-        if not user_id or not name:
-            return jsonify({'error': 'user_id and name are required'}), 400
+        if not user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+            
+        if not name:
+            return jsonify({'error': 'name is required'}), 400
         
+        # Ensure user exists in database
         user = User.query.get(user_id)
         if not user:
-            user = User(id=user_id, email=None)
+            user = User(id=user_id, email=user_data.get('email') if user_data else None)
             db.session.add(user)
             db.session.flush()
         
@@ -1058,7 +1069,7 @@ def create_notebook():
         )
         db.session.add(notebook)
         db.session.commit()
-        return jsonify({'notebook': notebook.to_dict()})
+        return jsonify(notebook.to_dict())
     except Exception as e:
         db.session.rollback()
         print(f"Create Notebook Error: {e}")
@@ -1068,9 +1079,12 @@ def create_notebook():
 def delete_notebook(notebook_id):
     """Delete a notebook and all its documents"""
     try:
-        user_id = request.args.get('user_id')
+        # Get user from session or query param for backwards compatibility
+        user_data = get_current_user_api()
+        user_id = user_data.get('id') if user_data else request.args.get('user_id')
+        
         if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
+            return jsonify({'error': 'Authentication required'}), 401
         
         notebook = Notebook.query.filter_by(id=notebook_id, user_id=user_id).first()
         if not notebook:
@@ -1142,45 +1156,44 @@ async def reprocess_document():
 def health_check():
     return jsonify({'status': 'healthy', 'message': 'Backend is running'})
 
-def sync_user_to_supabase(user_id, email=None, first_name=None, last_name=None, profile_image_url=None):
-    """Sync user to Supabase users table (for foreign key relationships)"""
+def sync_user_to_database(user_id, email=None, first_name=None, last_name=None, profile_image_url=None):
+    """Sync user to local database (for foreign key relationships with notebooks/documents)"""
     try:
-        # Check if user already exists in Supabase
-        existing = supabase.table('users').select('id').eq('id', user_id).execute()
-        if existing.data and len(existing.data) > 0:
+        # Check if user already exists in local database
+        existing_user = User.query.get(user_id)
+        if existing_user:
             return True  # User already exists
         
-        # Create user in Supabase
-        user_data = {
-            'id': user_id,
-            'email': email,
-            'first_name': first_name,
-            'last_name': last_name,
-            'profile_image_url': profile_image_url,
-            'is_email_verified': True,
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        }
-        
-        result = supabase.table('users').insert(user_data).execute()
-        print(f"User synced to Supabase: {user_id}")
+        # Create user in local database
+        new_user = User(
+            id=user_id,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            profile_image_url=profile_image_url,
+            is_email_verified=True
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        print(f"User synced to local database: {user_id}")
         return True
     except Exception as e:
+        db.session.rollback()
         # If it's a duplicate key error, that's fine
-        if '23505' in str(e):
+        if 'duplicate' in str(e).lower() or 'unique' in str(e).lower():
             return True
-        print(f"Error syncing user to Supabase: {e}")
+        print(f"Error syncing user to database: {e}")
         return False
 
 @app.route('/api/auth/sync-user', methods=['POST'])
 def sync_user():
-    """Sync current user to Supabase database for foreign key relationships"""
+    """Sync current user to local database for foreign key relationships"""
     try:
         user_data = get_current_user_api()
         if not user_data:
             return jsonify({'error': 'Not authenticated'}), 401
         
-        success = sync_user_to_supabase(
+        success = sync_user_to_database(
             user_id=user_data.get('id'),
             email=user_data.get('email'),
             first_name=user_data.get('first_name'),
@@ -1201,8 +1214,8 @@ def get_auth_user():
     """Get current authenticated user from Replit database"""
     user_data = get_current_user_api()
     if user_data:
-        # Sync user to Supabase on every auth check to ensure they exist
-        sync_user_to_supabase(
+        # Sync user to local database on every auth check to ensure they exist
+        sync_user_to_database(
             user_id=user_data.get('id'),
             email=user_data.get('email'),
             first_name=user_data.get('first_name'),
