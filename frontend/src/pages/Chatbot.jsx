@@ -1368,16 +1368,17 @@ function Chatbot({
         return;
       }
 
-      // Fetch documents for this user and notebook
-      const { data: documents, error } = await supabase
-        .from('documents')
-        .select('id, filename, original_filename, file_type, file_size, created_at, processing_status')
-        .eq('user_id', user.id)
-        .eq('notebook_id', currentNotebookId)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching documents:', error);
+      // Fetch documents using backend API (handles service user ownership correctly)
+      let documents = [];
+      try {
+        const docsResponse = await fetch(`/api/documents?notebook_id=${currentNotebookId}`);
+        if (docsResponse.ok) {
+          documents = await docsResponse.json();
+        } else {
+          console.error('Error fetching documents from API');
+        }
+      } catch (fetchError) {
+        console.error('Error fetching documents:', fetchError);
         setFlashcards(prev => prev.map(card =>
           card.isLoading ? { ...card, question: 'Error loading files.', answer: 'Please try again.', isLoading: false } : card
         ));
