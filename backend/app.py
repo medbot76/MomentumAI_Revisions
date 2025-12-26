@@ -453,8 +453,8 @@ async def upload_document():
 
 @app.route('/api/documents', methods=['GET'])
 def list_documents():
+    """List documents from Supabase"""
     try:
-        # Get user from session or query param for backwards compatibility
         user_data = get_current_user_api()
         user_id = user_data.get('id') if user_data else request.args.get('user_id')
         notebook_id = request.args.get('notebook_id')
@@ -462,12 +462,32 @@ def list_documents():
         if not user_id:
             return jsonify({'error': 'Authentication required'}), 401
         
-        query = Document.query.filter_by(user_id=user_id)
+        # Query Supabase directly
+        query = supabase.table('documents').select('*').eq('user_id', user_id)
         if notebook_id:
-            query = query.filter_by(notebook_id=notebook_id)
+            query = query.eq('notebook_id', notebook_id)
         
-        documents = query.order_by(Document.created_at.desc()).all()
-        return jsonify([d.to_dict() for d in documents])
+        response = query.order('created_at', desc=True).execute()
+        documents = response.data if response.data else []
+        
+        # Transform to match expected format
+        result = []
+        for doc in documents:
+            result.append({
+                'id': doc.get('id'),
+                'user_id': doc.get('user_id'),
+                'notebook_id': doc.get('notebook_id'),
+                'filename': doc.get('original_filename') or doc.get('filename'),
+                'original_filename': doc.get('original_filename'),
+                'storage_path': doc.get('storage_path'),
+                'content_type': doc.get('content_type'),
+                'file_size': doc.get('file_size'),
+                'status': doc.get('status', 'completed'),
+                'error_message': doc.get('error_message'),
+                'created_at': doc.get('created_at'),
+                'updated_at': doc.get('updated_at')
+            })
+        return jsonify(result)
     except Exception as e:
         print(f"Documents Error: {e}")
         return jsonify({'error': str(e)}), 500
@@ -1017,31 +1037,44 @@ async def add_study_plan_to_calendar():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# Notebook management endpoints
+# Notebook management endpoints - Uses Supabase as primary data store
 @app.route('/api/notebooks', methods=['GET'])
 def list_notebooks():
-    """List all notebooks for the authenticated user"""
+    """List all notebooks for the authenticated user from Supabase"""
     try:
-        # Get user from session or query param for backwards compatibility
         user_data = get_current_user_api()
         user_id = user_data.get('id') if user_data else request.args.get('user_id')
         
         if not user_id:
             return jsonify({'error': 'Authentication required'}), 401
         
-        notebooks = Notebook.query.filter_by(user_id=user_id).order_by(Notebook.created_at.desc()).all()
-        return jsonify([n.to_dict() for n in notebooks])
+        # Query Supabase directly
+        response = supabase.table('notebooks').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+        notebooks = response.data if response.data else []
+        
+        # Transform to match expected format
+        result = []
+        for nb in notebooks:
+            result.append({
+                'id': nb.get('id'),
+                'user_id': nb.get('user_id'),
+                'name': nb.get('name'),
+                'description': nb.get('description', ''),
+                'color': nb.get('color', '#4285f4'),
+                'created_at': nb.get('created_at'),
+                'updated_at': nb.get('updated_at')
+            })
+        return jsonify(result)
     except Exception as e:
         print(f"Notebooks Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/notebooks', methods=['POST'])
 def create_notebook():
-    """Create a new notebook for the authenticated user"""
+    """Create a new notebook in Supabase"""
     try:
         data = request.json or {}
         
-        # Get user from session or request body for backwards compatibility
         user_data = get_current_user_api()
         user_id = user_data.get('id') if user_data else data.get('user_id')
         
@@ -1055,48 +1088,61 @@ def create_notebook():
         if not name:
             return jsonify({'error': 'name is required'}), 400
         
-        # Ensure user exists in database
+        # Ensure user exists in local DB for auth purposes
         user = User.query.get(user_id)
         if not user:
             user = User(id=user_id, email=user_data.get('email') if user_data else None)
             db.session.add(user)
-            db.session.flush()
+            db.session.commit()
         
-        notebook = Notebook(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            name=name,
-            description=description,
-            color=color
-        )
-        db.session.add(notebook)
-        db.session.commit()
-        return jsonify(notebook.to_dict())
+        # Create notebook in Supabase
+        notebook_id = str(uuid.uuid4())
+        notebook_data = {
+            'id': notebook_id,
+            'user_id': user_id,
+            'name': name,
+            'description': description,
+            'color': color
+        }
+        
+        response = supabase.table('notebooks').insert(notebook_data).execute()
+        
+        if response.data and len(response.data) > 0:
+            nb = response.data[0]
+            return jsonify({
+                'id': nb.get('id'),
+                'user_id': nb.get('user_id'),
+                'name': nb.get('name'),
+                'description': nb.get('description', ''),
+                'color': nb.get('color', '#4285f4'),
+                'created_at': nb.get('created_at'),
+                'updated_at': nb.get('updated_at')
+            })
+        else:
+            return jsonify({'error': 'Failed to create notebook'}), 500
     except Exception as e:
-        db.session.rollback()
         print(f"Create Notebook Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/notebooks/<notebook_id>', methods=['DELETE'])
 def delete_notebook(notebook_id):
-    """Delete a notebook and all its documents"""
+    """Delete a notebook from Supabase"""
     try:
-        # Get user from session or query param for backwards compatibility
         user_data = get_current_user_api()
         user_id = user_data.get('id') if user_data else request.args.get('user_id')
         
         if not user_id:
             return jsonify({'error': 'Authentication required'}), 401
         
-        notebook = Notebook.query.filter_by(id=notebook_id, user_id=user_id).first()
-        if not notebook:
+        # Check notebook exists and belongs to user
+        check = supabase.table('notebooks').select('id').eq('id', notebook_id).eq('user_id', user_id).execute()
+        if not check.data or len(check.data) == 0:
             return jsonify({'error': 'Notebook not found or access denied'}), 404
         
-        db.session.delete(notebook)
-        db.session.commit()
+        # Delete from Supabase
+        supabase.table('notebooks').delete().eq('id', notebook_id).execute()
         return jsonify({'message': 'Notebook deleted successfully'})
     except Exception as e:
-        db.session.rollback()
         print(f"Delete Notebook Error: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -1234,25 +1280,45 @@ def migrate_documents():
         return jsonify({'error': str(e)}), 500
 
 def sync_user_to_database(user_id, email=None, first_name=None, last_name=None, profile_image_url=None):
-    """Sync user to local database (for foreign key relationships with notebooks/documents)"""
+    """Sync user to local database AND Supabase users table"""
     try:
-        # Check if user already exists in local database
+        # 1. Sync to local database (for auth purposes)
         existing_user = User.query.get(user_id)
-        if existing_user:
-            return True  # User already exists
+        if not existing_user:
+            new_user = User(
+                id=user_id,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                profile_image_url=profile_image_url,
+                is_email_verified=True
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            print(f"User synced to local database: {user_id}")
         
-        # Create user in local database
-        new_user = User(
-            id=user_id,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            profile_image_url=profile_image_url,
-            is_email_verified=True
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        print(f"User synced to local database: {user_id}")
+        # 2. Sync to Supabase users table (for FK constraints on notebooks/documents)
+        try:
+            # Check if user exists in Supabase
+            check = supabase.table('users').select('id').eq('id', user_id).execute()
+            if not check.data or len(check.data) == 0:
+                # Create user in Supabase
+                user_data = {
+                    'id': user_id,
+                    'email': email,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'profile_image_url': profile_image_url,
+                    'is_email_verified': True
+                }
+                supabase.table('users').insert(user_data).execute()
+                print(f"User synced to Supabase: {user_id}")
+        except Exception as supabase_error:
+            # If duplicate or constraint error, user already exists which is fine
+            error_str = str(supabase_error).lower()
+            if 'duplicate' not in error_str and '23505' not in str(supabase_error):
+                print(f"Supabase user sync warning: {supabase_error}")
+        
         return True
     except Exception as e:
         db.session.rollback()
