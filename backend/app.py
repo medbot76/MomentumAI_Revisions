@@ -1142,11 +1142,73 @@ async def reprocess_document():
 def health_check():
     return jsonify({'status': 'healthy', 'message': 'Backend is running'})
 
+def sync_user_to_supabase(user_id, email=None, first_name=None, last_name=None, profile_image_url=None):
+    """Sync user to Supabase users table (for foreign key relationships)"""
+    try:
+        # Check if user already exists in Supabase
+        existing = supabase.table('users').select('id').eq('id', user_id).execute()
+        if existing.data and len(existing.data) > 0:
+            return True  # User already exists
+        
+        # Create user in Supabase
+        user_data = {
+            'id': user_id,
+            'email': email,
+            'first_name': first_name,
+            'last_name': last_name,
+            'profile_image_url': profile_image_url,
+            'is_email_verified': True,
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        result = supabase.table('users').insert(user_data).execute()
+        print(f"User synced to Supabase: {user_id}")
+        return True
+    except Exception as e:
+        # If it's a duplicate key error, that's fine
+        if '23505' in str(e):
+            return True
+        print(f"Error syncing user to Supabase: {e}")
+        return False
+
+@app.route('/api/auth/sync-user', methods=['POST'])
+def sync_user():
+    """Sync current user to Supabase database for foreign key relationships"""
+    try:
+        user_data = get_current_user_api()
+        if not user_data:
+            return jsonify({'error': 'Not authenticated'}), 401
+        
+        success = sync_user_to_supabase(
+            user_id=user_data.get('id'),
+            email=user_data.get('email'),
+            first_name=user_data.get('first_name'),
+            last_name=user_data.get('last_name'),
+            profile_image_url=user_data.get('profile_image_url')
+        )
+        
+        if success:
+            return jsonify({'success': True, 'message': 'User synced to database'})
+        else:
+            return jsonify({'error': 'Failed to sync user'}), 500
+    except Exception as e:
+        print(f"Error in sync_user endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/auth/user', methods=['GET'])
 def get_auth_user():
     """Get current authenticated user from Replit database"""
     user_data = get_current_user_api()
     if user_data:
+        # Sync user to Supabase on every auth check to ensure they exist
+        sync_user_to_supabase(
+            user_id=user_data.get('id'),
+            email=user_data.get('email'),
+            first_name=user_data.get('first_name'),
+            last_name=user_data.get('last_name'),
+            profile_image_url=user_data.get('profile_image_url')
+        )
         return jsonify(user_data)
     return jsonify(None), 200
 

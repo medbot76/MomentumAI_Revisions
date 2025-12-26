@@ -39,6 +39,10 @@ The LD_LIBRARY_PATH is required for the grpc library used by google-generativeai
 - Installed all required Python packages to `.pythonlibs/`
 - Configured LD_LIBRARY_PATH for native library dependencies
 - Application now running successfully with all core features
+- Fixed "Error loading files" issue by adding user sync to Supabase database
+  - Backend now auto-syncs users to Supabase when they authenticate
+  - This fixes foreign key constraint issues when creating notebooks
+  - Added `ensureUserExists` function in frontend as fallback
 
 ## Environment Variables Required
 - `GEMINI_API_KEY`: Google Gemini API key for AI features

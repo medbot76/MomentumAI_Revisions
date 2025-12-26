@@ -510,10 +510,59 @@ const chatHistory = [
       logout();
     };
 
+    // Ensure user exists in the database before creating notebooks
+    const ensureUserExists = async () => {
+      if (!user?.id) return false;
+      
+      try {
+        // Check if user exists
+        const { data: existingUser, error: checkError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', user.id)
+          .single();
+        
+        if (existingUser) {
+          return true; // User already exists
+        }
+        
+        // Create user if they don't exist
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert([{
+            id: user.id,
+            email: user.email || null,
+            first_name: user.first_name || user.name?.split(' ')[0] || null,
+            last_name: user.last_name || user.name?.split(' ').slice(1).join(' ') || null,
+            profile_image_url: user.profile_image_url || user.image || null,
+            is_email_verified: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }]);
+        
+        if (insertError && insertError.code !== '23505') { // Ignore duplicate key error
+          console.error('Error creating user:', insertError);
+          return false;
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('Error ensuring user exists:', error);
+        return false;
+      }
+    };
+
     // Get or create notebook for the current chat
     const getOrCreateNotebook = async (notebookName = 'Default Notebook') => {
       try {
         if (!user?.id) {
+          return null;
+        }
+
+        // Ensure user exists in database first
+        const userExists = await ensureUserExists();
+        if (!userExists) {
+          console.error('Failed to ensure user exists in database');
           return null;
         }
 
